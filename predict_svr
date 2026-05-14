@@ -1,0 +1,144 @@
+import pandas as pd
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.svm import SVR
+
+# ============================================
+# 1. 读取 TRAIN
+# ============================================
+
+train_df = pd.read_excel(
+    "/Users/molin/Downloads/ML/Train/brain_age_features.xlsx"
+)
+
+print("Train shape:")
+print(train_df.shape)
+
+# ============================================
+# 2. X / y
+# ============================================
+
+X_train = train_df.drop(
+    columns=["subject_ID", "age"]
+)
+
+y_train = train_df["age"]
+
+# ============================================
+# 3. Standardization
+# ============================================
+
+scaler = StandardScaler()
+
+X_train_scaled = scaler.fit_transform(
+    X_train
+)
+
+# ============================================
+# 4. SVR model
+# ============================================
+
+model = SVR(
+
+    kernel='rbf',
+
+    C=10,
+
+    epsilon=0.1
+)
+
+print("\nTraining SVR model...")
+
+model.fit(
+    X_train_scaled,
+    y_train
+)
+
+print("Training done.")
+
+# ============================================
+# 5. 读取 TEST
+# ============================================
+
+test_df = pd.read_excel(
+    "/Users/molin/Downloads/ML/Test/brain_age_test_features.xlsx"
+)
+
+print("\nTest shape:")
+print(test_df.shape)
+
+# ============================================
+# 6. 保存 subject IDs
+# ============================================
+
+subject_ids = test_df["subject_ID"]
+
+# ============================================
+# 7. TEST X
+# ============================================
+
+X_test = test_df.drop(
+    columns=["subject_ID"]
+)
+
+# VERY IMPORTANT
+# feature order must match
+X_test = X_test[X_train.columns]
+
+# ============================================
+# 8. scaler transform
+# ============================================
+
+X_test_scaled = scaler.transform(
+    X_test
+)
+
+# ============================================
+# 9. predict
+# ============================================
+
+print("\nPredicting brain age...")
+
+predicted_age = model.predict(
+    X_test_scaled
+)
+
+print("Prediction done.")
+
+# ============================================
+# 10. 保存结果
+# ============================================
+
+results = pd.DataFrame({
+
+    "subject_ID": subject_ids,
+
+    "Predicted_Brain_Age": predicted_age
+
+})
+
+output_path = (
+    "/Users/molin/Downloads/ML/Test/"
+    "predicted_brain_age_svr.csv"
+)
+
+results.to_csv(
+    output_path,
+    index=False
+)
+
+# ============================================
+# 11. 输出结果
+# ============================================
+
+print("\n===================================")
+print("Prediction Complete")
+
+print("\nSaved:")
+print(output_path)
+
+print("\nExample predictions:")
+print(results.head())
+
+print("\nDone.")

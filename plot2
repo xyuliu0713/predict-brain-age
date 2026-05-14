@@ -1,0 +1,106 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+from sklearn.metrics import r2_score
+from sklearn.metrics import mean_absolute_error
+
+# ============================================
+# 1. 读取 10-fold prediction
+# ============================================
+
+DATA_PATH = (
+    "/Users/molin/Downloads/ML/Train/"
+    "10fold_cv_predictions_svr.csv"
+)
+
+df = pd.read_csv(DATA_PATH)
+
+print(df.head())
+
+# ============================================
+# 2. 提取 true / predicted
+# ============================================
+
+true_age = df["True_Age"]
+
+pred_age = df["Predicted_Age"]
+
+# ============================================
+# 3. 计算 metrics
+# ============================================
+
+mae = mean_absolute_error(
+    true_age,
+    pred_age
+)
+
+r2 = r2_score(
+    true_age,
+    pred_age
+)
+
+print(f"\nMAE = {mae:.2f}")
+
+print(f"R² = {r2:.3f}")
+
+# ============================================
+# 4. scatter plot
+# ============================================
+
+plt.figure(figsize=(7,7))
+
+# scatter
+plt.scatter(
+    true_age,
+    pred_age,
+    alpha=0.7
+)
+
+# ideal line
+min_age = min(true_age.min(), pred_age.min())
+max_age = max(true_age.max(), pred_age.max())
+
+plt.plot(
+    [min_age, max_age],
+    [min_age, max_age],
+    linestyle='--'
+)
+
+# labels
+plt.xlabel("True Age", fontsize=14)
+
+plt.ylabel("Predicted Age", fontsize=14)
+
+plt.title(
+    f"10-Fold Brain Age Prediction\n"
+    f"MAE = {mae:.2f} years, "
+    f"R² = {r2:.3f}",
+    fontsize=15
+)
+
+# grid
+plt.grid(True)
+
+plt.tight_layout()
+
+# ============================================
+# 5. 保存 figure
+# ============================================
+
+output_fig = (
+    "/Users/molin/Downloads/ML/Train/"
+    "brain_age_scatterplot.png"
+)
+
+plt.savefig(
+    output_fig,
+    dpi=300
+)
+
+print("\nSaved figure:")
+print(output_fig)
+
+# ============================================
+# 6. show
+# ============================================
+
+plt.show()

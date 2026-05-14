@@ -1,0 +1,287 @@
+import pandas as pd
+import glob
+import os
+from functools import reduce
+
+# ============================================
+# 1. 数据文件夹
+# ============================================
+
+DATA_DIR = "/Users/molin/Downloads/ML/Test"
+
+# ============================================
+# 2. 找到所有 csv
+# ============================================
+
+csv_files = glob.glob(os.path.join(DATA_DIR, "*.csv"))
+
+print("Found files:")
+
+for f in csv_files:
+    print(os.path.basename(f))
+
+# ============================================
+# 3. 分开 ROI 文件 和 subject_info
+# ============================================
+
+roi_files = []
+subject_info_file = None
+
+for f in csv_files:
+
+    filename = os.path.basename(f)
+
+    # subject_info
+    if "subject_info" in filename:
+
+        subject_info_file = f
+
+    # 只保留真正ROI文件
+    elif "389" in filename:
+
+        roi_files.append(f)
+
+print("\nROI files:")
+
+for f in roi_files:
+    print(os.path.basename(f))
+
+print("\nsubject_info:")
+print(os.path.basename(subject_info_file))
+
+# ============================================
+# 4. 读取 ROI 文件
+# ============================================
+
+roi_dfs = []
+
+for f in roi_files:
+
+    filename = os.path.basename(f)
+
+    print(f"\n===================================")
+    print(f"Processing: {filename}")
+
+    # ----------------------------------------
+    # 读取 csv
+    # ----------------------------------------
+
+    try:
+        df = pd.read_csv(
+            f,
+            encoding='utf-8',
+            index_col=0
+        )
+
+    except:
+
+        try:
+            df = pd.read_csv(
+                f,
+                encoding='gbk',
+                index_col=0
+            )
+
+        except:
+
+            df = pd.read_csv(
+                f,
+                encoding='gb18030',
+                index_col=0
+            )
+
+    # ----------------------------------------
+    # index -> column
+    # ----------------------------------------
+
+    df = df.reset_index()
+
+    # 第一列统一命名
+    df = df.rename(
+        columns={df.columns[0]: "subject_ID"}
+    )
+
+    # ----------------------------------------
+    # 删除全空列
+    # ----------------------------------------
+
+    df = df.dropna(axis=1, how='all')
+
+    # ----------------------------------------
+    # 添加 prefix
+    # ----------------------------------------
+
+    prefix = filename.replace(".csv", "")
+    prefix = prefix.replace(" - 389", "")
+    prefix = prefix.replace(" ", "_")
+    prefix = prefix.replace(".", "_")
+
+    new_columns = {}
+
+    for col in df.columns:
+
+        if col != "subject_ID":
+
+            new_name = f"{prefix}_{col}"
+
+            new_columns[col] = new_name
+
+    df = df.rename(columns=new_columns)
+
+    print("Shape:", df.shape)
+
+    roi_dfs.append(df)
+
+# ============================================
+# 5. merge 所有 ROI features
+# ============================================
+
+print("\n===================================")
+print("Merging ROI files...")
+
+merged_df = reduce(
+    lambda left, right:
+    pd.merge(
+        left,
+        right,
+        on="subject_ID",
+        how="inner"
+    ),
+    roi_dfs
+)
+
+print("Merged ROI shape:", merged_df.shape)
+
+# ============================================
+# 6. 读取 subject_info
+# ============================================
+
+print("\n===================================")
+print("Reading subject_info...")
+
+try:
+
+    subject_info = pd.read_csv(
+        subject_info_file,
+        encoding='utf-8'
+    )
+
+except:
+
+    try:
+
+        subject_info = pd.read_csv(
+            subject_info_file,
+            encoding='gbk'
+        )
+
+    except:
+
+        subject_info = pd.read_csv(
+            subject_info_file,
+            encoding='gb18030'
+        )
+
+# ----------------------------------------
+# 删除空列
+# ----------------------------------------
+
+subject_info = subject_info.dropna(
+    axis=1,
+    how='all'
+)
+
+print("\nsubject_info columns:")
+print(subject_info.columns.tolist())
+
+# ============================================
+# 7. 找 subject_ID 列
+# ============================================
+
+subject_col = None
+
+for col in subject_info.columns:
+
+    if "subject" in str(col).lower():
+
+        subject_col = col
+        break
+
+if subject_col is None:
+
+    raise ValueError(
+        "No subject_ID column found in subject_info"
+    )
+
+subject_info = subject_info.rename(
+    columns={subject_col: "subject_ID"}
+)
+
+# ============================================
+# 8. 不使用 age
+# ============================================
+
+final_df = merged_df.copy()
+
+print("\n===================================")
+print("No age column merged")
+
+print("Final shape:", final_df.shape)
+
+# ============================================
+# 11. 删除缺失值
+# ============================================
+
+print("\nDropping missing values...")
+
+final_df = final_df.dropna()
+
+print("After dropping NA:", final_df.shape)
+
+# ============================================
+# 12. 检查重复列
+# ============================================
+
+duplicate_cols = final_df.columns[
+    final_df.columns.duplicated()
+]
+
+print("\nDuplicate columns:")
+print(duplicate_cols)
+
+# ============================================
+# 13. 保存最终 feature table
+# ============================================
+
+output_path = os.path.join(
+    DATA_DIR,
+    "brain_age_test_features.xlsx"
+)
+
+final_df.to_excel(
+    output_path,
+    index=False
+)
+
+print("\n===================================")
+print("Saved final table:")
+print(output_path)
+
+# ============================================
+# 14. 准备 X
+# ============================================
+
+X = final_df.drop(
+    columns=["subject_ID"]
+)
+
+print("\n===================================")
+print("Feature Matrix Ready")
+
+print("\nX shape:")
+print(X.shape)
+
+print("\nFeature examples:")
+print(X.columns[:10])
+
+print("\nDone.")

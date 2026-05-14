@@ -1,0 +1,113 @@
+import pandas as pd
+
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+
+from xgboost import XGBRegressor
+
+# ============================================
+# 1. 读取 TRAIN
+# ============================================
+
+train_df = pd.read_excel(
+    "/Users/molin/Downloads/ML/Train/brain_age_features.xlsx"
+)
+
+# ============================================
+# 2. train X / y
+# ============================================
+
+X_train = train_df.drop(
+    columns=["subject_ID", "age"]
+)
+
+y_train = train_df["age"]
+
+# ============================================
+# 3. scaler
+# ============================================
+
+scaler = StandardScaler()
+
+X_train_scaled = scaler.fit_transform(X_train)
+
+# ============================================
+# 4. train model
+# ============================================
+
+model = XGBRegressor(
+    n_estimators=300,
+    max_depth=4,
+    learning_rate=0.05,
+    random_state=42
+)
+
+print("Training model...")
+
+model.fit(X_train_scaled, y_train)
+
+print("Training done.")
+
+# ============================================
+# 5. 读取 TEST
+# ============================================
+
+test_df = pd.read_excel(
+    "/Users/molin/Downloads/ML/Test/brain_age_test_features.xlsx"
+)
+
+# 保存 subject ID
+subject_ids = test_df["subject_ID"]
+
+# ============================================
+# 6. test X
+# ============================================
+
+X_test = test_df.drop(
+    columns=["subject_ID"]
+)
+
+# ============================================
+# 7. VERY IMPORTANT
+# 用 train scaler transform
+# ============================================
+# 保证 test feature 顺序和 train 完全一致
+X_test = X_test[X_train.columns]
+X_test_scaled = scaler.transform(X_test)
+
+# ============================================
+# 8. predict
+# ============================================
+
+predicted_age = model.predict(X_test_scaled)
+
+# ============================================
+# 9. 保存结果
+# ============================================
+
+results = pd.DataFrame({
+
+    "subject_ID": subject_ids,
+
+    "Predicted_Brain_Age": predicted_age
+
+})
+
+output_path = (
+    "/Users/molin/Downloads/ML/Test/"
+    "predicted_brain_age.csv"
+)
+
+results.to_csv(
+    output_path,
+    index=False
+)
+
+print("\nPrediction complete.")
+
+print("\nSaved:")
+print(output_path)
+
+print("\nExample predictions:")
+
+print(results.head())

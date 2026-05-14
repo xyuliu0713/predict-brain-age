@@ -1,0 +1,22 @@
+import re
+import pandas as pd
+
+# 文件路径
+file_path = "/Users/molin/Downloads/ML/Test/brain_age_test_features.xlsx"
+
+# 读取Excel
+df = pd.read_excel(file_path)
+
+# 1. 删除列名中的 "389_"
+# 2. 将连续两个下划线 "__" 替换成一个 "_"
+df.columns = [
+    re.sub(r"_+", "_", col.replace("389_", "").replace("-", "_"))
+    for col in df.columns
+]
+
+# 保存（覆盖原文件）
+df.to_excel(file_path, index=False)
+
+print("已完成：")
+print("- 删除 '389_'")
+print("- 将 '__' 替换为 '_'")
