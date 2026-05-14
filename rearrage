@@ -1,0 +1,21 @@
+import pandas as pd
+
+# 文件路径
+predicted_file = "/Users/molin/Downloads/ML/Test/predicted_brain_age.csv"
+subject_file = "/Users/molin/Downloads/ML/Test/subject_info - 389.csv"
+
+# 读取文件
+pred_df = pd.read_csv(predicted_file)
+subject_df = pd.read_csv(subject_file, encoding='latin1')  # 防止中文乱码报错
+
+# 根据 subject_ID 建立 age 映射
+age_map = pred_df.set_index("subject_ID")["Predicted_Brain_Age"]
+
+# 用 age 替换 “ÐÔ±ð” 这一列
+subject_df["ÐÔ±ð"] = subject_df["subject_ID"].map(age_map)
+
+# 保存结果
+output_file = "/Users/molin/Downloads/ML/Test/subject_updated.csv"
+subject_df.to_csv(output_file, index=False, encoding='utf-8-sig')
+
+print(f"已保存到: {output_file}")

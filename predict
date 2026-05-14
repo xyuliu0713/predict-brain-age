@@ -1,0 +1,300 @@
+import pandas as pd
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.svm import SVR
+
+# ============================================
+
+# 1. READ TRAIN
+
+# ============================================
+
+train_df = pd.read_excel(
+
+    "/Users/molin/Downloads/ML/Train/brain_age_features.xlsx"
+
+)
+
+print("Train shape:")
+
+print(train_df.shape)
+
+# ============================================
+
+# 2. X / y
+
+# ============================================
+
+X_train = train_df.drop(
+
+    columns=["subject_ID", "age"]
+
+)
+
+y_train = train_df["age"]
+
+
+# ============================================
+
+# 3. STANDARDIZATION
+
+# ============================================
+
+scaler = StandardScaler()
+
+X_train_scaled = scaler.fit_transform(X_train)
+
+# ============================================
+
+# 4. TRAIN SVR MODEL
+
+# ============================================
+
+model = SVR(
+
+    kernel='rbf',
+
+    C=10,
+
+    epsilon=0.1
+
+)
+
+print("\nTraining SVR model...")
+
+model.fit(
+
+    X_train_scaled,
+
+    y_train
+
+)
+
+print("Training done.")
+
+# ============================================
+
+# 5. READ TEST FEATURES
+
+# ============================================
+
+test_df = pd.read_excel(
+
+    "/Users/molin/Downloads/ML/Test/brain_age_test_features.xlsx"
+
+)
+
+print("\nTest shape:")
+
+print(test_df.shape)
+
+# ============================================
+
+# 6. READ SCANNER INFO
+
+# ============================================
+
+scanner_df = pd.read_csv(
+    "/Users/molin/Downloads/ML/Test/subject_info - 389.csv",
+    encoding='latin1'
+)
+
+print(scanner_df.columns)
+print(scanner_df.head())
+
+print("\nScanner info shape:")
+
+print(scanner_df.shape)
+
+# 假设：
+
+# 第一列 = subject_ID
+
+# 第二列 = scanner type
+
+# ============================================
+# KEEP ONLY NEEDED COLUMNS
+# ============================================
+
+scanner_df = scanner_df.iloc[:, [0, 1]]
+
+scanner_df.columns = [
+    "subject_ID",
+    "Scanner"
+]
+
+print(scanner_df.head())
+
+# ============================================
+
+# 7. MERGE SCANNER INFO
+
+# ============================================
+
+test_df = test_df.merge(
+
+    scanner_df,
+
+    on="subject_ID"
+
+)
+
+print("\nMerged test shape:")
+
+print(test_df.shape)
+
+# ============================================
+
+# 8. SPLIT INTO GE / SIEMENS
+
+# ============================================
+
+ge_df = test_df[
+
+    test_df["Scanner"] == "GE"
+
+]
+
+siemens_df = test_df[
+
+    test_df["Scanner"] == "SIEMENS"
+
+]
+
+print("\nGE subjects:", len(ge_df))
+
+print("SIEMENS subjects:", len(siemens_df))
+
+# ============================================
+
+# 9. FUNCTION FOR PREDICTION
+
+# ============================================
+
+def predict_brain_age(group_df):
+
+    subject_ids = group_df["subject_ID"]
+
+    X_group = group_df.drop(
+
+        columns=["subject_ID", "Scanner"]
+
+    )
+
+    # feature order MUST match training
+
+    X_group = X_group[X_train.columns]
+
+    # scale
+
+    X_group_scaled = scaler.transform(
+
+        X_group
+
+    )
+
+    # predict
+
+    predicted_age = model.predict(
+
+        X_group_scaled
+
+    )
+
+    results = pd.DataFrame({
+
+        "subject_ID": subject_ids,
+
+        "Scanner": group_df["Scanner"],
+
+        "Predicted_Brain_Age": predicted_age
+
+    })
+
+    return results
+
+# ============================================
+
+# 10. PREDICT GE
+
+# ============================================
+
+print("\nPredicting GE group...")
+
+ge_results = predict_brain_age(ge_df)
+
+# ============================================
+
+# 11. PREDICT SIEMENS
+
+# ============================================
+
+print("\nPredicting SIEMENS group...")
+
+siemens_results = predict_brain_age(siemens_df)
+
+# ============================================
+
+# 12. SAVE RESULTS
+
+# ============================================
+
+ge_output = (
+
+    "/Users/molin/Downloads/ML/Test/"
+
+    "predicted_brain_age_GE.csv"
+
+)
+
+siemens_output = (
+
+    "/Users/molin/Downloads/ML/Test/"
+
+    "predicted_brain_age_SIEMENS.csv"
+
+)
+
+ge_results.to_csv(
+
+    ge_output,
+
+    index=False
+
+)
+
+siemens_results.to_csv(
+
+    siemens_output,
+
+    index=False
+
+)
+
+
+# ============================================
+
+# 13. DONE
+
+# ============================================
+
+print("\n===================================")
+
+print("Prediction Complete")
+
+print("\nSaved:")
+
+print(ge_output)
+
+print(siemens_output)
+
+print("\nGE example:")
+
+print(ge_results.head())
+
+print("\nSIEMENS example:")
+
+print(siemens_results.head())
+
+print("\nDone.")

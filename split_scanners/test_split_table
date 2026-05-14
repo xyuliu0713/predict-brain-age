@@ -1,0 +1,22 @@
+import pandas as pd
+
+# 文件路径
+input_file = "/Users/molin/Downloads/ML/Test/brain_age_test_features_with_scanner.xlsx"
+
+# 读取文件
+df = pd.read_excel(input_file)
+
+# 根据scanner列分类
+ge_df = df[df["scanner"] == "GE"]
+siemens_df = df[df["scanner"] == "SIEMENS"]
+
+# 输出文件路径
+ge_output = "/Users/molin/Downloads/ML/Test/brain_age_test_features_GE.xlsx"
+siemens_output = "/Users/molin/Downloads/ML/Test/brain_age_test_features_SIEMENS.xlsx"
+
+# 保存文件
+ge_df.to_excel(ge_output, index=False)
+siemens_df.to_excel(siemens_output, index=False)
+
+print(f"GE 文件已保存: {ge_output}")
+print(f"SIEMENS 文件已保存: {siemens_output}")

@@ -1,0 +1,37 @@
+import pandas as pd
+
+# 文件路径
+brain_age_file = "/Users/molin/Downloads/ML/Train/brain_age_features.xlsx"
+subject_info_file = "/Users/molin/Downloads/ML/Train/subject_info - 1600.csv"
+
+# 读取文件
+brain_df = pd.read_excel(brain_age_file)
+subject_df = pd.read_csv(subject_info_file)
+
+# 获取subject_info中的前两列
+# 第一列: subject_ID
+# 第二列: scanner
+subject_df = subject_df.iloc[:, [0, 1]]
+subject_df.columns = ["subject_ID", "scanner"]
+
+# 按subject_ID合并
+merged_df = brain_df.merge(subject_df, on="subject_ID", how="left")
+
+# 将scanner列移动到第二列
+cols = merged_df.columns.tolist()
+
+# 取出scanner列
+cols.remove("scanner")
+
+# 插入到第二列位置
+cols.insert(1, "scanner")
+
+merged_df = merged_df[cols]
+
+# 输出文件路径
+output_file = "/Users/molin/Downloads/ML/Train/brain_age_features_with_scanner.xlsx"
+
+# 保存
+merged_df.to_excel(output_file, index=False)
+
+print(f"新文件已保存：{output_file}")

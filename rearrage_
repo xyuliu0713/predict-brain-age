@@ -1,0 +1,47 @@
+import pandas as pd
+
+# 文件路径
+predicted_file = "/Users/molin/Downloads/ML/Test/predicted_brain_age.csv"
+subject_file = "/Users/molin/Downloads/ML/Test/subject_info - 389.csv"
+
+# 读取文件
+predicted_df = pd.read_csv(predicted_file)
+subject_df = pd.read_csv(subject_file, encoding="latin1")
+
+# 建立 subject_ID -> age 映射
+age_map = dict(zip(predicted_df["subject_ID"], predicted_df["Predicted_Brain_Age"]))
+
+# 新增年龄列
+subject_df["年龄"] = subject_df["subject_ID"].map(age_map)
+
+# 修改列名
+rename_dict = {
+    "MRIÉ¨ÃèÒÇÀàÐÍ": "MRI扫描仪类型",
+    "ÐÔ±ð": "性别",
+    "×¢£ºÐÔ±ð£¨1=Female, 2=Male)": "注：性别（1=Female,2=Male）"
+}
+
+subject_df = subject_df.rename(columns=rename_dict)
+
+# 只保留需要的5列（其余3列自动删除）
+final_df = subject_df[
+    [
+        "subject_ID",
+        "MRI扫描仪类型",
+        "性别",
+        "年龄",
+        "注：性别（1=Female,2=Male）"
+    ]
+]
+
+# 保存
+output_file = "/Users/molin/Downloads/ML/Test/subject_info_updated.csv"
+
+final_df.to_csv(output_file, index=False, encoding="utf-8-sig")
+
+print("最终保留列：")
+print(final_df.columns.tolist())
+
+print(f"\n已保存到: {output_file}")
+
+

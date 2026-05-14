@@ -1,0 +1,279 @@
+import pandas as pd
+import numpy as np
+
+from sklearn.model_selection import KFold
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.metrics import (
+    mean_absolute_error,
+    r2_score
+)
+
+from sklearn.svm import SVR
+
+# ============================================
+# 1. 读取数据
+# ============================================
+
+DATA_PATH = (
+    "/Users/molin/Downloads/ML/Train/"
+    "brain_age_features_SIEMENS.xlsx"
+)
+
+df = pd.read_excel(DATA_PATH)
+
+print("Data shape:")
+print(df.shape)
+
+# ============================================
+# 2. 清洗 column names
+# ============================================
+
+df.columns = [
+
+    str(c)
+    .strip()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("__", "_")
+
+    for c in df.columns
+]
+
+# ============================================
+# 3. X / y
+# ============================================
+
+X = df.drop(
+    columns=["subject_ID", "age", "scanner"]
+)
+
+y = df["age"]
+
+print("\nX shape:")
+print(X.shape)
+
+print("\ny shape:")
+print(y.shape)
+
+# ============================================
+# 4. 10-fold CV
+# ============================================
+
+kf = KFold(
+    n_splits=10,
+    shuffle=True,
+    random_state=42
+)
+
+# 保存结果
+mae_list = []
+r2_list = []
+
+all_true = []
+all_pred = []
+
+# ============================================
+# 5. Cross-validation loop
+# ============================================
+
+fold = 1
+
+for train_index, test_index in kf.split(X):
+
+    print("\n===================================")
+    print(f"Fold {fold}")
+
+    # ----------------------------------------
+    # split
+    # ----------------------------------------
+
+    X_train = X.iloc[train_index]
+    X_test = X.iloc[test_index]
+
+    y_train = y.iloc[train_index]
+    y_test = y.iloc[test_index]
+
+    print("Train size:", X_train.shape)
+    print("Test size:", X_test.shape)
+
+    # ----------------------------------------
+    # scaler
+    # IMPORTANT:
+    # fit only on train
+    # ----------------------------------------
+
+    scaler = StandardScaler()
+
+    X_train_scaled = scaler.fit_transform(
+        X_train
+    )
+
+    X_test_scaled = scaler.transform(
+        X_test
+    )
+
+    # ========================================
+    # 6. SVR model
+    # ========================================
+
+    model = SVR(
+
+        kernel='rbf',
+
+        C=10,
+
+        epsilon=0.1
+
+    )
+
+    # ----------------------------------------
+    # train
+    # ----------------------------------------
+
+    model.fit(
+        X_train_scaled,
+        y_train
+    )
+
+    # ----------------------------------------
+    # predict
+    # ----------------------------------------
+
+    y_pred = model.predict(
+        X_test_scaled
+    )
+
+    # ----------------------------------------
+    # metrics
+    # ----------------------------------------
+
+    mae = mean_absolute_error(
+        y_test,
+        y_pred
+    )
+
+    r2 = r2_score(
+        y_test,
+        y_pred
+    )
+
+    print(f"MAE: {mae:.2f}")
+
+    print(f"R²: {r2:.3f}")
+
+    mae_list.append(mae)
+    r2_list.append(r2)
+
+    # 保存 prediction
+    all_true.extend(y_test)
+    all_pred.extend(y_pred)
+
+    fold += 1
+
+# ============================================
+# 7. Final results
+# ============================================
+
+print("\n===================================")
+print("FINAL RESULTS")
+print("===================================")
+
+print(f"\nMean MAE: {np.mean(mae_list):.2f}")
+
+print(f"STD MAE: {np.std(mae_list):.2f}")
+
+print(f"\nMean R²: {np.mean(r2_list):.3f}")
+
+print(f"STD R²: {np.std(r2_list):.3f}")
+
+# ============================================
+# 8. Brain Age Gap
+# ============================================
+
+brain_age_gap = (
+    np.array(all_pred)
+    -
+    np.array(all_true)
+)
+
+print("\nBrain Age Gap summary:")
+
+print(
+    pd.Series(brain_age_gap).describe()
+)
+
+# ============================================
+# 9. 保存 prediction
+# ============================================
+
+results_df = pd.DataFrame({
+
+    "True_Age": all_true,
+
+    "Predicted_Age": all_pred,
+
+    "Brain_Age_Gap": brain_age_gap
+})
+
+output_path = (
+    "/Users/molin/Downloads/ML/Train/"
+    "10fold_cv_predictions_SIEMENS_svr.csv"
+)
+
+results_df.to_csv(
+    output_path,
+    index=False
+)
+
+print("\nSaved predictions:")
+print(output_path)
+
+# ============================================
+# 10. scatterplot
+# ============================================
+
+import matplotlib.pyplot as plt
+
+plt.figure(figsize=(6,6))
+
+plt.scatter(
+    all_true,
+    all_pred,
+    alpha=0.6
+)
+
+# 理想线
+min_age = min(all_true)
+max_age = max(all_true)
+
+plt.plot(
+    [min_age, max_age],
+    [min_age, max_age]
+)
+
+plt.xlabel("True Age")
+
+plt.ylabel("Predicted Brain Age")
+
+plt.title("SIEMENS SVR 10-Fold CV")
+
+plt.tight_layout()
+
+figure_path = (
+    "/Users/molin/Downloads/ML/Train/"
+    "svr_10fold_scatter.png"
+)
+
+plt.savefig(
+    figure_path,
+    dpi=300
+)
+
+print("\nSaved figure:")
+print(figure_path)
+
+plt.show()
+
+print("\nDone.")
