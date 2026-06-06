@@ -1,0 +1,365 @@
+import pandas as pd
+import numpy as np
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVR
+
+from sklearn.metrics import (
+    mean_absolute_error,
+    r2_score
+)
+
+# =====================================================
+# 1. Paths
+# =====================================================
+
+TRAIN_PATH = (
+    "/Users/molin/Downloads/ML2/Train/"
+    "brain_age_features3.xlsx"
+)
+
+TEST_PATH = (
+    "/Users/molin/Downloads/ML2/Test/"
+    "brain_age_test_features3.xlsx"
+)
+
+# =====================================================
+# 2. Load data
+# =====================================================
+
+train_df = pd.read_excel(TRAIN_PATH)
+
+test_df = pd.read_excel(TEST_PATH)
+
+print("Train shape:")
+print(train_df.shape)
+
+print("\nTest shape:")
+print(test_df.shape)
+
+# =====================================================
+# 3. Clean column names
+# =====================================================
+
+def clean_columns(df):
+
+    df.columns = [
+
+        str(c)
+        .strip()
+        .replace(" ", "_")
+        .replace("-", "_")
+        .replace("(", "")
+        .replace(")", "")
+        .replace("=", "_")
+        .replace("__", "_")
+
+        for c in df.columns
+    ]
+
+    return df
+
+train_df = clean_columns(train_df)
+
+test_df = clean_columns(test_df)
+
+print("\nColumns:")
+print(train_df.columns.tolist())
+
+# =====================================================
+# 4. Metadata columns
+# =====================================================
+
+AGE_COL = "Age"
+
+GENDER_COL = "Gender_1_Female,_2_Male"
+
+SCANNER_COL = "MRI_scanner"
+
+# =====================================================
+# 5. One-hot encoding scanner
+# =====================================================
+
+# combine first to ensure same dummy columns
+
+combined_scanners = pd.concat([
+
+    train_df[SCANNER_COL],
+    test_df[SCANNER_COL]
+
+])
+
+scanner_dummies = pd.get_dummies(
+
+    combined_scanners,
+
+    prefix="scanner",
+
+    drop_first=True
+)
+
+# split back
+
+train_scanner_dummies = scanner_dummies.iloc[
+    :len(train_df)
+]
+
+test_scanner_dummies = scanner_dummies.iloc[
+    len(train_df):
+]
+
+# add to dataframes
+
+train_df = pd.concat(
+
+    [train_df, train_scanner_dummies],
+
+    axis=1
+)
+
+test_df = pd.concat(
+
+    [test_df, test_scanner_dummies],
+
+    axis=1
+)
+
+print("\nScanner dummy columns:")
+print(train_scanner_dummies.columns.tolist())
+
+# =====================================================
+# 6. Create subgroup labels
+# =====================================================
+
+def create_group(df):
+
+    gender_map = {
+
+        1: "Female",
+        2: "Male"
+    }
+
+    df["Group"] = (
+
+        df[GENDER_COL]
+        .map(gender_map)
+
+        + "_"
+
+        + df[SCANNER_COL].astype(str)
+    )
+
+    return df
+
+train_df = create_group(train_df)
+
+test_df = create_group(test_df)
+
+print("\nGroups in TRAIN:")
+print(train_df["Group"].unique())
+
+print("\nGroups in TEST:")
+print(test_df["Group"].unique())
+
+# =====================================================
+# 7. Brain age function
+# =====================================================
+
+def run_group_model(
+
+    train_group_df,
+    test_group_df,
+    label
+):
+
+    print("\n===================================")
+    print(label)
+    print("===================================")
+
+    # -------------------------------------------------
+    # Feature columns
+    # -------------------------------------------------
+
+    exclude_cols = [
+
+        "subject_ID",
+
+        AGE_COL,
+
+        GENDER_COL,
+
+        SCANNER_COL,
+
+        "Group"
+    ]
+
+    feature_cols = [
+
+        c for c in train_group_df.columns
+
+        if c not in exclude_cols
+    ]
+
+    X_train = train_group_df[feature_cols]
+
+    y_train = train_group_df[AGE_COL]
+
+    X_test = test_group_df[feature_cols]
+
+
+    print("\nTrain X shape:")
+    print(X_train.shape)
+
+    print("\nTest X shape:")
+    print(X_test.shape)
+
+    # -------------------------------------------------
+    # Standardization
+    # -------------------------------------------------
+
+    scaler = StandardScaler()
+
+    X_train_scaled = scaler.fit_transform(
+        X_train
+    )
+
+    X_test_scaled = scaler.transform(
+        X_test
+    )
+
+    # -------------------------------------------------
+    # SVR model
+    # -------------------------------------------------
+
+    model = SVR(
+
+        kernel='rbf',
+
+        C=10,
+
+        epsilon=0.1
+    )
+
+    # -------------------------------------------------
+    # Train
+    # -------------------------------------------------
+
+    model.fit(
+
+        X_train_scaled,
+
+        y_train
+    )
+
+    # -------------------------------------------------
+    # Predict
+    # -------------------------------------------------
+
+    y_pred = model.predict(
+        X_test_scaled
+    )
+
+    # -------------------------------------------------
+    # Metrics
+    # -------------------------------------------------
+
+
+    # -------------------------------------------------
+    # Brain Age Gap
+    # -------------------------------------------------
+
+
+    print("\nBrain Age Gap summary:")
+
+
+    # -------------------------------------------------
+    # Save results
+    # -------------------------------------------------
+
+    results_df = pd.DataFrame({
+
+        "subject_ID":
+            test_group_df["subject_ID"].values,
+
+        "Predicted_Age":
+            y_pred
+    })
+
+    output_path = (
+
+        "/Users/molin/Downloads/ML2/Test/"
+
+        f"{label}_predictions.csv"
+    )
+
+    results_df.to_csv(
+
+        output_path,
+
+        index=False
+    )
+
+    print("\nSaved:")
+    print(output_path)
+
+# =====================================================
+# 8. Run each subgroup
+# =====================================================
+
+groups = sorted(
+
+    list(
+
+        set(train_df["Group"])
+
+        &
+
+        set(test_df["Group"])
+    )
+)
+
+print("\nCommon groups:")
+print(groups)
+
+# =====================================================
+# 9. Loop through groups
+# =====================================================
+
+for group_name in groups:
+
+    print("\n###################################")
+    print(group_name)
+    print("###################################")
+
+    train_group = train_df[
+
+        train_df["Group"] == group_name
+    ]
+
+    test_group = test_df[
+
+        test_df["Group"] == group_name
+    ]
+
+    # skip empty groups
+
+    if len(train_group) < 5:
+
+        print("\nToo few training samples.")
+        continue
+
+    if len(test_group) < 1:
+
+        print("\nNo testing samples.")
+        continue
+
+    run_group_model(
+
+        train_group,
+
+        test_group,
+
+        group_name
+    )
+
+print("\nDone.")

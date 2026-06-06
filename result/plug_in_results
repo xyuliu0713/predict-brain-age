@@ -1,0 +1,40 @@
+import pandas as pd
+
+# 文件路径
+
+#pred_file = "/Users/molin/Downloads/ML2/Test/brain_age_test_predictions_xgboost.csv"
+#pred_file = "/Users/molin/Downloads/ML2/Test/brain_age_test_predictions_pipeline.csv"
+pred_file = "/Users/molin/Downloads/ML2/Test/brain_age_test_predictions4.csv"
+info_file = "/Users/molin/Downloads/ML2/subject_info-389.csv"
+
+# 读取文件
+
+pred_df = pd.read_csv(pred_file)
+
+info_df = pd.read_csv(info_file, encoding="latin1")
+
+# 获取列名
+
+subject_col_pred = pred_df.columns[0]      # subject_ID
+
+pred_age_col = pred_df.columns[1]          # Predicted_Age
+
+subject_col_info = info_df.columns[0]      # subject_ID
+
+target_col = info_df.columns[3]            # ÄêÁä
+
+# 根据 subject_ID 建立映射
+
+age_map = dict(zip(pred_df[subject_col_pred], pred_df[pred_age_col]))
+
+# 将 Predicted_Age 填入 subject_info-389.csv 的第四列 ÄêÁä
+
+info_df[target_col] = info_df[subject_col_info].map(age_map)
+
+# 保存结果
+
+output_file = "/Users/molin/Downloads/ML2/subject_info-389_updated5.csv"
+
+info_df.to_csv(output_file, index=False)
+
+print(f"完成，结果已保存到: {output_file}")

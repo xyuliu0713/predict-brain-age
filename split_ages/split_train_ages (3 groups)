@@ -1,0 +1,70 @@
+import pandas as pd
+
+# =====================================================
+# Load data
+# =====================================================
+
+TRAIN_PATH = (
+    "/Users/molin/Downloads/ML2/Train/"
+    "brain_age_features3.xlsx"
+)
+
+df = pd.read_excel(TRAIN_PATH)
+
+# =====================================================
+# Create age groups
+# =====================================================
+
+df["Age_Group"] = pd.cut(
+    df["Age"],
+    bins=[18, 35, 55, 76],
+    labels=["Young", "Middle", "Old"],
+    include_lowest=True
+)
+
+# =====================================================
+# Check sample sizes
+# =====================================================
+
+print("\nSample count per group:")
+print(df["Age_Group"].value_counts().sort_index())
+
+# =====================================================
+# Age summary
+# =====================================================
+
+summary = (
+    df.groupby("Age_Group")["Age"]
+      .agg(["count", "min", "max", "mean", "std"])
+)
+
+print("\nAge summary:")
+print(summary)
+
+# =====================================================
+# Save full dataset with Age_Group column
+# =====================================================
+
+young_df = df[df["Age_Group"] == "Young"]
+middle_df = df[df["Age_Group"] == "Middle"]
+old_df = df[df["Age_Group"] == "Old"]
+
+young_df.to_excel(
+    "/Users/molin/Downloads/ML2/Train/brain_age_young.xlsx",
+    index=False
+)
+
+middle_df.to_excel(
+    "/Users/molin/Downloads/ML2/Train/brain_age_middle.xlsx",
+    index=False
+)
+
+old_df.to_excel(
+    "/Users/molin/Downloads/ML2/Train/brain_age_old.xlsx",
+    index=False
+)
+
+print("\nFiles saved:")
+print("brain_age_young.xlsx")
+print("brain_age_middle.xlsx")
+print("brain_age_old.xlsx")

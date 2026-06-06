@@ -1,0 +1,31 @@
+import pandas as pd
+from sklearn.metrics import mean_absolute_error
+
+# 读取
+df1 = pd.read_csv("/Users/molin/Downloads/ML2/subject_info-389_2groups.csv")
+#df1 = pd.read_csv("/Users/molin/Downloads/ML/Test/predicted_brain_age_svr.csv")
+df2 = pd.read_csv("/Users/molin/Downloads/ML2/subject_info-389-5-19_TabPFN_full_expected_5p18.csv")
+
+# 第一列作为ID
+id_col1 = df1.columns[0]
+id_col2 = df2.columns[0]
+
+# 最后一列作为age
+age1 = df1.columns[-2]
+age2 = df2.columns[-2]
+
+# merge
+merged = pd.merge(
+    df1[[id_col1, age1]],
+    df2[[id_col2, age2]],
+    left_on=id_col1,
+    right_on=id_col2
+)
+
+# MAE
+mae = mean_absolute_error(
+    merged[age1],
+    merged[age2]
+)
+
+print("MAE =", mae)

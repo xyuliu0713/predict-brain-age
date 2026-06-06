@@ -1,0 +1,805 @@
+#              MAE_mean   MAE_std   R2_mean  Corr_mean
+# SVR          3.577162  0.730443 -0.433815   0.190494
+# ElasticNet   3.482038  0.857886 -0.347224   0.208872
+# PLS          3.592213  0.734245 -0.419470   0.246561
+# KernelRidge  3.458266  0.675074 -0.298924   0.239380
+
+# Best Overall Model:
+# KernelRidge
+
+
+import os
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from scipy.stats import pearsonr
+
+from sklearn.model_selection import (
+    KFold,
+    GridSearchCV
+)
+
+from sklearn.metrics import (
+    mean_absolute_error,
+    r2_score
+)
+
+from sklearn.pipeline import Pipeline
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.decomposition import PCA
+from sklearn.svm import SVR
+
+from sklearn.linear_model import ElasticNet
+
+from sklearn.cross_decomposition import PLSRegression
+
+from sklearn.kernel_ridge import KernelRidge
+
+from xgboost import XGBRegressor
+
+from lightgbm import LGBMRegressor
+
+# ============================================
+# THREADS
+# ============================================
+
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+
+np.random.seed(42)
+
+# ============================================
+# PATHS
+# ============================================
+
+TRAIN_PATH = "/Users/molin/Downloads/ML2/Train/split_age2/split_ageMale_GE_young.xlsx"
+
+TEST_PATH = "/Users/molin/Downloads/ML2/Test/split_age2/split_ageMale_GE_young.xlsx"
+
+# ============================================
+# LOAD DATA
+# ============================================
+
+df = pd.read_excel(TRAIN_PATH)
+
+test_df = pd.read_excel(TEST_PATH)
+
+print("\nTrain shape:")
+
+print(df.shape)
+
+print("\nTest shape:")
+
+print(test_df.shape)
+
+# ============================================
+# CLEAN COLUMNS
+# ============================================
+
+def clean_columns(df):
+
+    df.columns = [
+
+        str(c).strip()
+        .replace(" ", "_")
+        .replace("-", "_")
+        .replace("(", "")
+        .replace(")", "")
+        .replace("=", "_")
+        .replace("__", "_")
+
+        for c in df.columns
+    ]
+
+    return df
+
+df = clean_columns(df)
+
+test_df = clean_columns(test_df)
+
+# ============================================
+# FEATURES
+# ============================================
+
+AGE_COL = "Age"
+
+GENDER_COL = "Gender_1_Female,_2_Male"
+
+SCANNER_COL = "MRI_scanner"
+
+Age_Group_COL = "Age_Group"
+
+exclude_cols = [
+
+    "subject_ID",
+
+    AGE_COL,
+
+    GENDER_COL,
+
+    SCANNER_COL,
+    Age_Group_COL
+]
+
+feature_cols = [
+
+    c for c in df.columns
+
+    if c not in exclude_cols
+]
+
+X = df[feature_cols]
+
+y = df[AGE_COL]
+
+X_test_final = test_df[feature_cols]
+
+print("\nNumber of features:")
+
+print(len(feature_cols))
+
+# ============================================
+# OUTER CV
+# ============================================
+
+kf = KFold(
+
+    n_splits=10,
+
+    shuffle=True,
+
+    random_state=42
+)
+
+# ============================================
+# MODELS
+# ============================================
+
+models = {
+
+    # ========================================
+    # SVR
+    # ========================================
+
+    # "SVR": {
+
+    #     "pipeline": Pipeline([
+
+    #         ("scaler", StandardScaler()),
+
+    #         ("svr", SVR())
+    #     ]),
+
+    #     "params": {
+
+    #         "svr__C": [20, 35, 50, 65, 80, 95],
+
+    #         "svr__gamma": [
+    #             "scale", 0.0002, 0.0003, 0.0004, 0.0005, 0.0006, 0.0007
+    #         ],
+
+    #         "svr__epsilon": [0.05, 0.1, 0.25, 0.5, 0.75, 1, 1.25, 1.5]
+    #     }
+    # },
+
+    # # ========================================
+    # # ELASTIC NET
+    # # ========================================
+
+    # "ElasticNet": {
+
+    #     "pipeline": Pipeline([
+
+    #         ("scaler", StandardScaler()),
+
+    #         ("enet", ElasticNet(
+    #             max_iter=20000,
+    #             tol=1e-3,
+    #             random_state=42
+    #         ))
+    #     ]),
+
+    #     "params": {
+
+    #         "enet__alpha": [
+    #             0.1,
+    #             0.2,
+    #             0.3,
+    #             0.4,
+    #             0.5,
+    #             0.6,
+    #             0.7, 
+    #             0.8,
+    #             0.9
+    #         ],
+
+    #         "enet__l1_ratio": [
+    #             0.1,
+    #             0.2,
+    #             0.3,
+    #             0.4,
+    #             0.5,
+    #             0.6
+    #         ]
+    #     }
+    # },
+
+    # # # ========================================
+    # # # PLS
+    # # # ========================================
+
+    # "PLS": {
+
+    #     "pipeline": Pipeline([
+
+    #         ("scaler", StandardScaler()),
+
+    #         ("pls", PLSRegression())
+    #     ]),
+
+    #     "params": {
+
+    #         "pls__n_components": [
+    #             3,
+    #             5,
+    #             6,
+    #             7,
+    #             8,
+    #             9
+    #         ]
+    #     }
+    # },
+
+    # ========================================
+    # KERNEL RIDGE
+    # ========================================
+
+    "KernelRidge": {
+
+        "pipeline": Pipeline([
+
+            ("scaler", StandardScaler()),
+
+            ("krr", KernelRidge(
+                kernel="rbf"
+            ))
+        ]),
+
+        "params": {
+
+            "krr__alpha": [
+                0.01,
+                0.02,
+                0.03,
+                0.04,
+                0.05,
+                0.06
+            ],
+
+            "krr__gamma": [
+                0.00005,
+                0.0001,
+                2e-4,
+                3e-4,
+                4e-4,
+                5e-4,
+                6e-4,
+                7e-4,
+                8e-4
+            ]
+        }
+    },
+
+    # # ========================================
+    # # XGBOOST
+    # # ========================================
+
+    # "XGBoost": {
+
+    #     "pipeline": XGBRegressor(
+
+    #         objective="reg:squarederror",
+
+    #         random_state=42,
+
+    #         n_jobs=-1,
+
+    #         tree_method="hist"
+    #     ),
+
+    #     "params": {
+
+    #         "n_estimators": [
+    #             200,
+    #             500
+    #         ],
+
+    #         "max_depth": [
+    #             2,
+    #             3,
+    #         ],
+
+    #         "learning_rate": [
+    #             0.03,
+    #             0.07,
+    #         ],
+
+    #         "subsample": [
+    #             0.8
+    #         ],
+
+    #         "colsample_bytree": [
+    #             0.7,
+    #         ],
+
+    #         "reg_alpha": [
+    #             0,
+    #             0.5
+    #         ],
+
+    #         "reg_lambda": [
+    #             5,
+    #             10
+    #         ]
+    #     }
+    # },
+
+    # # ========================================
+    # # LIGHTGBM
+    # # ========================================
+
+    # "LightGBM": {
+
+    #     "pipeline": LGBMRegressor(
+
+    #         random_state=42,
+
+    #         verbose=-1
+    #     ),
+
+    #     "params": {
+
+    #         "n_estimators": [
+    #             200,
+    #             400
+    #         ],
+
+    #         "learning_rate": [
+    #             0.03,
+    #             0.05,
+    #         ],
+
+    #         "max_depth": [
+    #             2,
+    #             3,
+    #         ],
+
+    #         "num_leaves": [
+    #             4,
+    #             8,
+    #         ],
+    #          "subsample": [
+    #             0.8
+    #         ],
+
+    #         "colsample_bytree": [
+    #             0.7,
+    #         ],
+
+    #         "reg_alpha": [
+    #             0,
+
+    #         ],
+
+    #         "reg_lambda": [
+    #             10
+    #         ]
+    #     }
+    # }
+ }
+
+# ============================================
+# STORE RESULTS
+# ============================================
+
+results = {}
+
+# ============================================
+# NESTED CV
+# ============================================
+
+for model_name, model_info in models.items():
+
+    print("\n===================================")
+
+    print(f"MODEL: {model_name}")
+
+    print("===================================")
+
+    mae_list = []
+
+    r2_list = []
+
+    corr_list = []
+
+    all_true = []
+
+    all_pred = []
+
+    fold = 1
+
+    for train_idx, test_idx in kf.split(X):
+
+        print("\n-----------------------------------")
+
+        print(f"Outer Fold {fold}")
+
+        print("-----------------------------------")
+
+        X_train = X.iloc[train_idx]
+
+        X_val = X.iloc[test_idx]
+
+        y_train = y.iloc[train_idx]
+
+        y_val = y.iloc[test_idx]
+
+        # ====================================
+        # GRID SEARCH
+        # ====================================
+
+        grid = GridSearchCV(
+
+            estimator=model_info["pipeline"],
+
+            param_grid=model_info["params"],
+
+            cv=5,
+
+            scoring="neg_mean_absolute_error",
+
+            n_jobs=-1,
+
+            verbose=0
+        )
+
+        # ====================================
+        # TRAIN
+        # ====================================
+
+        grid.fit(
+
+            X_train,
+
+            y_train
+        )
+
+        best_model = grid.best_estimator_
+
+        print("\nBest Parameters:")
+
+        print(grid.best_params_)
+
+        # ====================================
+        # PREDICT
+        # ====================================
+
+        y_pred = best_model.predict(X_val)
+
+        # PLS FIX
+        if model_name == "PLS":
+
+            y_pred = y_pred.flatten()
+
+        # ====================================
+        # METRICS
+        # ====================================
+
+        mae = mean_absolute_error(
+            y_val,
+            y_pred
+        )
+
+        r2 = r2_score(
+            y_val,
+            y_pred
+        )
+
+        corr, _ = pearsonr(
+            y_val,
+            y_pred
+        )
+
+        print(f"\nMAE: {mae:.3f}")
+
+        print(f"R2: {r2:.3f}")
+
+        print(f"Correlation: {corr:.3f}")
+
+        # ====================================
+        # STORE
+        # ====================================
+
+        mae_list.append(mae)
+
+        r2_list.append(r2)
+
+        corr_list.append(corr)
+
+        all_true.extend(y_val)
+
+        all_pred.extend(y_pred)
+
+        fold += 1
+
+    # ========================================
+    # FINAL RESULTS
+    # ========================================
+
+    results[model_name] = {
+
+        "MAE_mean": np.mean(mae_list),
+
+        "MAE_std": np.std(mae_list),
+
+        "R2_mean": np.mean(r2_list),
+
+        "Corr_mean": np.mean(corr_list)
+    }
+
+    print("\n===================================")
+
+    print(f"FINAL RESULTS: {model_name}")
+
+    print("===================================")
+
+    print(
+        f"\nMean MAE: {np.mean(mae_list):.3f}"
+    )
+
+    print(
+        f"STD MAE: {np.std(mae_list):.3f}"
+    )
+
+    print(
+        f"\nMean R2: {np.mean(r2_list):.3f}"
+    )
+
+    print(
+        f"\nMean Correlation: {np.mean(corr_list):.3f}"
+    )
+
+    # ========================================
+    # BRAIN AGE GAP
+    # ========================================
+
+    brain_age_gap = (
+
+        np.array(all_pred)
+
+        -
+
+        np.array(all_true)
+    )
+
+    print("\nBrain Age Gap Summary:")
+
+    print(
+        pd.Series(brain_age_gap).describe()
+    )
+
+# ========================================
+
+# TRUE AGE VS PREDICTED AGE PLOT
+
+# ========================================
+
+all_true_np = np.array(all_true)
+
+all_pred_np = np.array(all_pred)
+
+corr_plot, _ = pearsonr(
+
+    all_true_np,
+
+    all_pred_np
+
+)
+
+mae_plot = mean_absolute_error(
+
+    all_true_np,
+
+    all_pred_np
+
+)
+
+r2_plot = r2_score(
+
+    all_true_np,
+
+    all_pred_np
+
+)
+
+plt.figure(figsize=(7, 7))
+
+plt.scatter(
+
+    all_true_np,
+
+    all_pred_np,
+
+    alpha=0.7
+
+)
+
+# ideal line
+
+min_age = min(
+
+    all_true_np.min(),
+
+    all_pred_np.min()
+
+)
+
+max_age = max(
+
+    all_true_np.max(),
+
+    all_pred_np.max()
+
+)
+
+plt.plot(
+
+    [min_age, max_age],
+
+    [min_age, max_age],
+
+    linestyle="--"
+
+)
+
+plt.xlabel("True Age")
+
+plt.ylabel("Predicted Age")
+
+plt.title(
+
+    f"{model_name}\n"
+
+    f"r = {corr_plot:.3f}, "
+
+    f"MAE = {mae_plot:.3f}, "
+
+    f"R² = {r2_plot:.3f}"
+
+)
+
+plt.grid(alpha=0.3)
+
+plt.tight_layout()
+
+plt.show()
+
+# ============================================
+# SUMMARY TABLE
+# ============================================
+
+print("\n===================================")
+
+print("ALL MODEL RESULTS")
+
+print("===================================")
+
+summary_df = pd.DataFrame(results).T
+
+print(summary_df)
+
+# ============================================
+# BEST MODEL
+# ============================================
+
+best_model_name = summary_df["MAE_mean"].idxmin()
+
+print("\nBest Overall Model:")
+
+print(best_model_name)
+
+# ============================================
+# RETRAIN BEST MODEL
+# ============================================
+
+best_pipeline = models[best_model_name]["pipeline"]
+
+best_params = models[best_model_name]["params"]
+
+print("\n===================================")
+
+print("TRAINING FINAL MODEL")
+
+print("===================================")
+
+final_grid = GridSearchCV(
+
+    estimator=best_pipeline,
+
+    param_grid=best_params,
+
+    cv=5,
+
+    scoring="neg_mean_absolute_error",
+
+    n_jobs=-1,
+
+    verbose=1
+)
+
+final_grid.fit(X, y)
+
+final_model = final_grid.best_estimator_
+
+print("\nFinal Best Parameters:")
+
+print(final_grid.best_params_)
+
+# ============================================
+# TEST PREDICTION
+# ============================================
+
+test_pred = final_model.predict(
+    X_test_final
+)
+
+if best_model_name == "PLS":
+
+    test_pred = test_pred.flatten()
+
+# ============================================
+# SAVE
+# ============================================
+
+out = pd.DataFrame({
+
+    "Predicted_Age": np.round(
+        test_pred
+    ).astype(int)
+})
+
+if "subject_ID" in test_df.columns:
+
+    out.insert(
+
+        0,
+
+        "subject_ID",
+
+        test_df["subject_ID"]
+    )
+
+OUT_PATH = (
+
+    "/Users/molin/Downloads/ML2/Test/result2/Male_GE_young_predictions.csv"
+)
+
+out.to_csv(
+
+    OUT_PATH,
+
+    index=False
+)
+
+print("\nSaved predictions:")
+
+print(OUT_PATH)
+
+print("\n===================================")
+
+print("ALL DONE")
+
+print("===================================")

@@ -1,0 +1,73 @@
+import pandas as pd
+
+# =========================
+# 文件路径
+# =========================
+
+info_file = "/Users/molin/Downloads/ML2/subject_info-389.csv"
+
+pred_files = [
+    "/Users/molin/Downloads/ML2/Test/Female_GE_best_model_predictions.csv",
+    "/Users/molin/Downloads/ML2/Test/Female_SIEMENS_best_model_predictions.csv",
+    "/Users/molin/Downloads/ML2/Test/Male_GE_best_model_predictions.csv",
+    "/Users/molin/Downloads/ML2/Test/Male_SIEMENS_best_model_predictions.csv"
+]
+
+# =========================
+# 读取 subject_info
+# =========================
+
+info_df = pd.read_csv(info_file, encoding="latin1")
+
+# subject_info 中的列
+subject_col_info = info_df.columns[0]   # subject_ID
+target_col = info_df.columns[3]         # ÄêÁä
+
+# =========================
+# 合并所有 prediction 文件
+# =========================
+
+all_pred_dfs = []
+
+for pred_file in pred_files:
+
+    pred_df = pd.read_csv(pred_file)
+
+    # prediction 文件中的列
+    subject_col_pred = pred_df.columns[0]
+    pred_age_col = pred_df.columns[1]
+
+    # 只保留前两列
+    pred_df = pred_df[[subject_col_pred, pred_age_col]]
+
+    all_pred_dfs.append(pred_df)
+
+# 合并四个 dataframe
+merged_pred_df = pd.concat(all_pred_dfs, ignore_index=True)
+
+# =========================
+# 建立 subject_ID -> Predicted_Age 映射
+# =========================
+
+age_map = dict(
+    zip(
+        merged_pred_df[subject_col_pred],
+        merged_pred_df[pred_age_col]
+    )
+)
+
+# =========================
+# 按 subject_ID 对齐填充
+# =========================
+
+info_df[target_col] = info_df[subject_col_info].map(age_map)
+
+# =========================
+# 保存结果
+# =========================
+
+output_file = "/Users/molin/Downloads/ML2/subject_info-389_updated.csv"
+
+info_df.to_csv(output_file, index=False)
+
+print(f"完成，结果已保存到: {output_file}")

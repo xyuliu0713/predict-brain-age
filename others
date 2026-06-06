@@ -1,0 +1,26 @@
+    "rh_GrayVol",
+    "aseg_",
+    "rh_MeanCurv",
+    "rh_SurfArea",
+    "rh_ThickAvg",
+    "lh_GausCurv",
+    "lh_GrayVol",
+    "lh_MeanCurv",
+    "lh_SurfArea",
+    "wmparc_",
+    "lh_ThickAvg",
+    "rh_GausCurv"
+
+* aseg_Left-Hippocampus
+* lh_entorhinal
+* lh_precuneus
+* lh_inferiorparietal
+* lh_precentral
+* aseg_Right-Hippocampus
+* rh_entorhinal
+* rh_precuneus
+* rh_inferiorparietal
+* rh_precentral
+
+conda activate afq_clean
+pip install openpyxl

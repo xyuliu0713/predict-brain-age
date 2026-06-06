@@ -1,0 +1,180 @@
+import pandas as pd
+import numpy as np
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.decomposition import PCA
+
+from sklearn.cluster import KMeans
+
+# ============================================
+# 1. 读取 TRAIN
+# ============================================
+
+train_df = pd.read_excel(
+    "/Users/molin/Downloads/ML/Train/"
+    "brain_age_features.xlsx"
+)
+
+# 清洗 column names
+train_df.columns = [
+
+    str(c)
+    .strip()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("__", "_")
+
+    for c in train_df.columns
+]
+
+# ============================================
+# 2. train features
+# ============================================
+
+X_train = train_df.drop(
+    columns=["subject_ID", "age"]
+)
+
+# ============================================
+# 3. scaler
+# ============================================
+
+scaler = StandardScaler()
+
+X_train_scaled = scaler.fit_transform(
+    X_train
+)
+
+# ============================================
+# 4. PCA
+# ============================================
+
+pca = PCA(
+    n_components=10
+)
+
+X_train_pca = pca.fit_transform(
+    X_train_scaled
+)
+
+print("Train PCA shape:")
+print(X_train_pca.shape)
+
+# ============================================
+# 5. clustering
+# ============================================
+
+kmeans = KMeans(
+
+    n_clusters=3,
+
+    random_state=42
+)
+
+train_clusters = kmeans.fit_predict(
+    X_train_pca
+)
+
+print("\nTrain cluster counts:")
+
+print(
+    pd.Series(train_clusters).value_counts()
+)
+
+# ============================================
+# 6. 读取 TEST
+# ============================================
+
+test_df = pd.read_excel(
+    "/Users/molin/Downloads/ML/Test/"
+    "brain_age_test_features.xlsx"
+)
+
+# 清洗 column names
+test_df.columns = [
+
+    str(c)
+    .strip()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("__", "_")
+
+    for c in test_df.columns
+]
+
+# ============================================
+# 7. 保存 subject IDs
+# ============================================
+
+subject_ids = test_df["subject_ID"]
+
+# ============================================
+# 8. test features
+# IMPORTANT:
+# feature顺序必须和train一致
+# ============================================
+
+X_test = test_df.drop(
+    columns=["subject_ID"]
+)
+
+X_test = X_test[X_train.columns]
+
+# ============================================
+# 9. transform test
+# IMPORTANT:
+# ONLY transform
+# NEVER fit
+# ============================================
+
+X_test_scaled = scaler.transform(
+    X_test
+)
+
+X_test_pca = pca.transform(
+    X_test_scaled
+)
+
+print("\nTest PCA shape:")
+print(X_test_pca.shape)
+
+# ============================================
+# 10. predict clusters
+# ============================================
+
+test_clusters = kmeans.predict(
+    X_test_pca
+)
+
+# ============================================
+# 11. 保存结果
+# ============================================
+
+results = pd.DataFrame({
+
+    "subject_ID": subject_ids,
+
+    "PC1": X_test_pca[:,0],
+
+    "PC2": X_test_pca[:,1],
+
+    "Cluster": test_clusters
+})
+
+output_path = (
+    "/Users/molin/Downloads/ML/Test/"
+    "test_unsupervised_results.csv"
+)
+
+results.to_csv(
+    output_path,
+    index=False
+)
+
+print("\nSaved:")
+print(output_path)
+
+print("\nExample results:")
+
+print(results.head())

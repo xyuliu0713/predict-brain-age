@@ -1,0 +1,245 @@
+import pandas as pd
+import numpy as np
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.decomposition import PCA
+
+from sklearn.cluster import KMeans
+
+import matplotlib.pyplot as plt
+
+# ============================================
+# 1. 读取数据
+# ============================================
+
+DATA_PATH = (
+    "/Users/molin/Downloads/ML/Train/"
+    "brain_age_features.xlsx"
+)
+
+df = pd.read_excel(DATA_PATH)
+
+print("Data shape:")
+print(df.shape)
+
+# ============================================
+# 2. 清洗 column names
+# ============================================
+
+df.columns = [
+
+    str(c)
+    .strip()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("__", "_")
+
+    for c in df.columns
+]
+
+# ============================================
+# 3. 提取 features
+# ============================================
+
+X = df.drop(
+    columns=["subject_ID", "age"]
+)
+
+print("\nFeature matrix shape:")
+print(X.shape)
+
+# ============================================
+# 4. Standardization
+# VERY IMPORTANT
+# ============================================
+
+scaler = StandardScaler()
+
+X_scaled = scaler.fit_transform(X)
+
+print("\nScaling complete.")
+
+# ============================================
+# 5. PCA
+# ============================================
+
+pca = PCA(
+    n_components=10
+)
+
+X_pca = pca.fit_transform(X_scaled)
+
+print("\nPCA shape:")
+print(X_pca.shape)
+
+# ============================================
+# 6. Explained variance
+# ============================================
+
+explained = pca.explained_variance_ratio_
+
+print("\nExplained variance ratio:")
+
+for i, var in enumerate(explained):
+
+    print(f"PC{i+1}: {var:.3f}")
+
+print(
+    f"\nTotal explained variance: "
+    f"{np.sum(explained):.3f}"
+)
+
+# ============================================
+# 7. PCA dataframe
+# ============================================
+
+pca_df = pd.DataFrame({
+
+    "subject_ID": df["subject_ID"],
+
+    "PC1": X_pca[:,0],
+
+    "PC2": X_pca[:,1],
+
+    "PC3": X_pca[:,2],
+
+    "Age": df["age"]
+})
+
+# ============================================
+# 8. PCA visualization
+# ============================================
+
+plt.figure(figsize=(7,6))
+
+scatter = plt.scatter(
+
+    pca_df["PC1"],
+
+    pca_df["PC2"],
+
+    c=pca_df["Age"],
+
+    alpha=0.7
+)
+
+plt.colorbar(scatter, label="Age")
+
+plt.xlabel("PC1")
+
+plt.ylabel("PC2")
+
+plt.title("PCA of Brain Morphometry by age")
+
+plt.tight_layout()
+
+# 保存: 点聚在一起表示brain phenotype 相似. 颜色渐变显示年龄分布
+pca_fig = (
+    "/Users/molin/Downloads/ML/Train/"
+    "pca_age_effect.png"
+)
+
+plt.savefig(
+    pca_fig,
+    dpi=300
+)
+
+print("\nSaved PCA figure:")
+print(pca_fig)
+
+plt.show()
+
+# ============================================
+# 9. KMeans clustering
+# ============================================
+
+kmeans = KMeans(
+
+    n_clusters=3,
+
+    random_state=42
+)
+
+clusters = kmeans.fit_predict(X_pca)
+
+pca_df["Cluster"] = clusters
+
+print("\nCluster counts:")
+
+print(
+    pca_df["Cluster"].value_counts()
+)
+
+# ============================================
+# 10. Cluster visualization
+# ============================================
+
+plt.figure(figsize=(7,6))
+
+plt.scatter(
+
+    pca_df["PC1"],
+
+    pca_df["PC2"],
+
+    c=pca_df["Cluster"],
+
+    alpha=0.7
+)
+
+plt.xlabel("PC1")
+
+plt.ylabel("PC2")
+
+plt.title("Brain Morphometry Age Clusters")
+
+plt.tight_layout()
+
+cluster_fig = (
+    "/Users/molin/Downloads/ML/Train/"
+    "brain_clusters.png"
+)
+
+plt.savefig(
+    cluster_fig,
+    dpi=300
+)
+
+print("\nSaved cluster figure:")
+print(cluster_fig)
+
+plt.show()
+
+# ============================================
+# 11. Cluster age statistics
+# ============================================
+
+print("\n===================================")
+print("Cluster age summary")
+print("===================================")
+
+print(
+
+    pca_df.groupby("Cluster")["Age"].describe()
+
+)
+
+# ============================================
+# 12. 保存结果
+# ============================================
+
+output_path = (
+    "/Users/molin/Downloads/ML/Train/"
+    "pca_age_results.csv"
+)
+
+pca_df.to_csv(
+    output_path,
+    index=False
+)
+
+print("\nSaved:")
+print(output_path)
+
+print("\nDone.")

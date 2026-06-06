@@ -1,0 +1,122 @@
+import os
+import numpy as np
+import pandas as pd
+
+# =====================================
+# 输入输出路径
+# =====================================
+
+# Train（用于计算mean和SD）
+train_file = "/Users/molin/Downloads/ML2/Train/brain_age_features2.xlsx"
+
+# Test（需要清洗）
+test_file = "/Users/molin/Downloads/ML2/Test/brain_age_test_features2.xlsx"
+
+# 输出
+output_file = "/Users/molin/Downloads/ML2/Test/brain_age_test_features3.xlsx"
+
+# =====================================
+# 读取数据
+# =====================================
+
+train_df = pd.read_excel(train_file)
+test_df = pd.read_excel(test_file)
+
+# =====================================
+# 不参与异常检测的列
+# =====================================
+
+exclude_cols = [
+    "subject_ID",
+    "Gender (1=Female, 2=Male)",
+    "MRI scanner"
+]
+
+# =====================================
+# feature列
+# =====================================
+
+feature_cols = [
+    col for col in test_df.columns
+    if col not in exclude_cols
+]
+
+print("开始使用Train统计量清洗Test集...\n")
+
+# 记录替换数量
+total_replaced = 0
+
+# =====================================
+# 对每个feature处理
+# =====================================
+
+for feature in feature_cols:
+
+    # 跳过非数值列
+    if not pd.api.types.is_numeric_dtype(test_df[feature]):
+        continue
+
+    # Train和Test都必须存在该列
+    if feature not in train_df.columns:
+        print(f"{feature}: Train中不存在，跳过")
+        continue
+
+    # =====================================
+    # 用Train计算mean和SD
+    # =====================================
+
+    train_values = train_df[feature].dropna()
+
+    # 数据太少跳过
+    if len(train_values) < 10:
+        continue
+
+    train_mean = train_values.mean()
+    train_std = train_values.std()
+
+    # 防止SD=0
+    if train_std == 0:
+        continue
+
+    # =====================================
+    # Test数据
+    # =====================================
+
+    test_values = test_df[feature]
+
+    # =====================================
+    # 用Train统计量计算Test z-score
+    # =====================================
+
+    z_scores = np.abs(
+        (test_values - train_mean) / train_std
+    )
+
+    # outlier标准
+    outliers = z_scores > 3
+
+    # outlier index
+    outlier_idx = test_df.index[outliers]
+
+    # =====================================
+    # 用Train mean替换异常值
+    # =====================================
+
+    test_df.loc[outlier_idx, feature] = train_mean
+
+    replaced_num = len(outlier_idx)
+    total_replaced += replaced_num
+
+    print(f"{feature}: 替换 {replaced_num} 个异常cell")
+
+print("\n====================")
+print(f"总共替换异常cell: {total_replaced}")
+print("====================")
+
+# =====================================
+# 保存
+# =====================================
+
+test_df.to_excel(output_file, index=False)
+
+print(f"\n已保存:\n{output_file}")

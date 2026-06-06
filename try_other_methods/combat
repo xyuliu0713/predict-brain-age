@@ -1,0 +1,319 @@
+import pandas as pd
+import numpy as np
+
+from sklearn.model_selection import KFold
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVR
+from sklearn.metrics import mean_absolute_error, r2_score
+
+import os
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+
+np.random.seed(42)
+
+# ============================================
+# 1. LOAD DATA
+# ============================================
+
+DATA_PATH = "/Users/molin/Downloads/ML2/Train/brain_age_features3.xlsx"
+df = pd.read_excel(DATA_PATH)
+
+print("===================================")
+print("Data Loaded")
+print(df.shape)
+print("===================================")
+
+# ============================================
+# 2. CLEAN COLUMNS
+# ============================================
+
+df.columns = [
+    str(c).strip()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("(", "")
+    .replace(")", "")
+    .replace("=", "_")
+    .replace("__", "_")
+    for c in df.columns
+]
+
+# ============================================
+# 3. META INFO
+# ============================================
+
+AGE_COL = "Age"
+GENDER_COL = "Gender_1_Female,_2_Male"
+SCANNER_COL = "MRI_scanner"
+
+print(df[SCANNER_COL].value_counts())
+
+# ============================================
+# 4. COMBAT IMPORT
+# ============================================
+
+from neuroHarmonize import harmonizationLearn, harmonizationApply
+
+
+# ============================================
+# 5. 🔥 SAFE COVARIATE BUILDER (CORE FIX)
+# ============================================
+
+def build_covars(age=None, gender=None, mode="train"):
+    """
+    永远返回 DataFrame（强制安全）
+    """
+
+    if mode == "train":
+        covars = pd.DataFrame({
+            "age": np.asarray(age).reshape(-1),
+            "gender": np.asarray(gender).reshape(-1)
+        })
+    else:
+        covars = pd.DataFrame({
+            "gender": np.asarray(gender).reshape(-1)
+        })
+
+    # 强制检查（防 silent bug）
+    if not isinstance(covars, pd.DataFrame):
+        raise ValueError("covars is not DataFrame")
+
+    if covars.isnull().any().any():
+        raise ValueError("covars contains NaN")
+
+    return covars
+
+
+# ============================================
+# 6. MODEL FUNCTION (CV + COMBAT + SVR)
+# ============================================
+
+def run_brain_age_model(data, label):
+
+    print("\n===================================")
+    print("Running:", label)
+    print("===================================")
+
+    feature_cols = [
+        c for c in data.columns
+        if c not in ["subject_ID", AGE_COL, GENDER_COL, SCANNER_COL]
+    ]
+
+    X = data[feature_cols].values
+    y = data[AGE_COL].values
+    scanner = data[SCANNER_COL].values
+    gender = data[GENDER_COL].values
+
+    kf = KFold(n_splits=10, shuffle=True, random_state=42)
+
+    maes = []
+    r2s = []
+
+    all_true = []
+    all_pred = []
+
+    fold = 1
+
+    for train_idx, test_idx in kf.split(X):
+
+        print("\n-------------------- Fold", fold)
+
+        # ======================
+        # split
+        # ======================
+        X_train, X_test = X[train_idx], X[test_idx]
+        y_train, y_test = y[train_idx], y[test_idx]
+
+        scanner_train = scanner[train_idx]
+        scanner_test = scanner[test_idx]
+
+        gender_train = gender[train_idx]
+        gender_test = gender[test_idx]
+
+        # ======================
+        # scaler
+        # ======================
+        scaler = StandardScaler()
+        X_train = scaler.fit_transform(X_train)
+        X_test = scaler.transform(X_test)
+
+        # ======================
+        # SAFE COVARS
+        # ======================
+        covars_train = build_covars(
+            age=y_train,
+            gender=gender_train,
+            mode="train"
+        )
+
+        covars_test = build_covars(
+            gender=gender_test,
+            mode="test"
+        )
+
+        # ======================
+        # DEBUG CHECK (important)
+        # ======================
+        assert isinstance(covars_train, pd.DataFrame)
+        assert isinstance(covars_test, pd.DataFrame)
+
+        # ======================
+        # COMBAT
+        # ======================
+        combat_model, X_train_cb = harmonizationLearn(
+            X_train,
+            scanner_train,
+            covars_train
+        )
+
+        X_test_cb = harmonizationApply(
+            X_test,
+            scanner_test,
+            covars_test,
+            combat_model
+        )
+
+        # ======================
+        # SVR
+        # ======================
+        model = SVR(kernel='rbf', C=10, epsilon=0.1)
+        model.fit(X_train_cb, y_train)
+
+        y_pred = model.predict(X_test_cb)
+
+        # ======================
+        # METRICS
+        # ======================
+        mae = mean_absolute_error(y_test, y_pred)
+        r2 = r2_score(y_test, y_pred)
+
+        print("MAE:", round(mae, 3))
+        print("R2:", round(r2, 3))
+
+        maes.append(mae)
+        r2s.append(r2)
+
+        all_true.extend(y_test)
+        all_pred.extend(y_pred)
+
+        fold += 1
+
+    # ======================
+    # FINAL RESULTS
+    # ======================
+    print("\n===================================")
+    print("FINAL:", label)
+    print("===================================")
+
+    print("MAE:", np.mean(maes), "+/-", np.std(maes))
+    print("R2:", np.mean(r2s))
+
+    gap = np.array(all_pred) - np.array(all_true)
+
+    print("\nBrain Age Gap:")
+    print(pd.Series(gap).describe())
+
+
+# ============================================
+# 7. GROUP ANALYSIS
+# ============================================
+
+groups = df.groupby([GENDER_COL, SCANNER_COL])
+
+for (gender, scanner), group_df in groups:
+
+    gender_name = "Female" if gender == 1 else "Male"
+    label = f"{gender_name}_{scanner}"
+
+    run_brain_age_model(group_df, label)
+
+
+# ============================================
+# 8. FINAL MODEL (FULL DATA)
+# ============================================
+
+print("\n===================================")
+print("FINAL MODEL TRAINING")
+print("===================================")
+
+feature_cols = [
+    c for c in df.columns
+    if c not in ["subject_ID", AGE_COL, GENDER_COL, SCANNER_COL]
+]
+
+X = df[feature_cols].values
+y = df[AGE_COL].values
+scanner = df[SCANNER_COL].values
+gender = df[GENDER_COL].values
+
+scaler = StandardScaler()
+X = scaler.fit_transform(X)
+
+covars = build_covars(
+    age=y,
+    gender=gender,
+    mode="train"
+)
+
+combat_model, X_cb = harmonizationLearn(
+    X,
+    scanner,
+    covars
+)
+
+final_model = SVR(kernel='rbf', C=10, epsilon=0.1)
+final_model.fit(X_cb, y)
+
+print("Final model trained")
+
+
+# ============================================
+# 9. TEST DATA
+# ============================================
+
+TEST_PATH = "/Users/molin/Downloads/ML2/Test/brain_age_test_features3.xlsx"
+test_df = pd.read_excel(TEST_PATH)
+
+test_df.columns = [
+    str(c).strip()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("(", "")
+    .replace(")", "")
+    .replace("=", "_")
+    .replace("__", "_")
+    for c in test_df.columns
+]
+
+X_test = test_df[feature_cols].values
+scanner_test = test_df[SCANNER_COL].values
+gender_test = test_df[GENDER_COL].values
+
+X_test = scaler.transform(X_test)
+
+covars_test = build_covars(
+    gender=gender_test,
+    mode="test"
+)
+
+X_test_cb = harmonizationApply(
+    X_test,
+    scanner_test,
+    covars_test,
+    combat_model
+)
+
+pred = final_model.predict(X_test_cb)
+
+output = pd.DataFrame({
+    "Predicted_Age": np.round(pred).astype(int)
+})
+
+if "subject_ID" in test_df.columns:
+    output.insert(0, "subject_ID", test_df["subject_ID"])
+
+out_path = "/Users/molin/Downloads/ML2/Test/brain_age_test_predictions_combat.csv"
+output.to_csv(out_path, index=False)
+
+print("Saved:", out_path)

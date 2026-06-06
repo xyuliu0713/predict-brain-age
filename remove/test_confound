@@ -1,0 +1,386 @@
+import pandas as pd
+import numpy as np
+import pickle
+
+from sklearn.linear_model import LinearRegression
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import StandardScaler
+from sklearn.svm import SVR
+
+# ============================================
+# 1. paths
+# ============================================
+
+TRAIN_PATH = (
+    "/Users/molin/Downloads/ML2/Train/"
+    "brain_age_features3.xlsx"
+)
+
+TEST_PATH = (
+    "/Users/molin/Downloads/ML2/Test/"
+    "brain_age_test_features2.xlsx"
+)
+
+OUTPUT_PATH = (
+    "/Users/molin/Downloads/ML2/Test/"
+    "predicted_brain_age_svr.csv"
+)
+
+# ============================================
+# 2. read train
+# ============================================
+
+train_df = pd.read_excel(TRAIN_PATH)
+
+print("Train shape:")
+print(train_df.shape)
+
+# ============================================
+# 3. clean column names
+# ============================================
+
+train_df.columns = [
+
+    str(c)
+    .strip()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("(", "")
+    .replace(")", "")
+    .replace("=", "_")
+    .replace("__", "_")
+
+    for c in train_df.columns
+]
+
+# ============================================
+# 4. metadata columns
+# ============================================
+
+GENDER_COL = "Gender_1_Female,_2_Male"
+SCANNER_COL = "MRI_scanner"
+
+exclude_cols = [
+
+    "subject_ID",
+    "Age",
+    GENDER_COL,
+    SCANNER_COL
+]
+
+# ============================================
+# 5. ROI features
+# ============================================
+
+feature_cols = [
+
+    c for c in train_df.columns
+
+    if c not in exclude_cols
+]
+
+print("\nNumber of features:")
+print(len(feature_cols))
+
+# ============================================
+# 6. confounds
+# ============================================
+
+train_confounds = train_df[[
+    GENDER_COL,
+    SCANNER_COL
+]]
+
+train_confounds = pd.get_dummies(
+    train_confounds,
+    columns=[SCANNER_COL],
+    drop_first=True
+)
+
+print("\nTrain confounds:")
+print(train_confounds.columns.tolist())
+
+# ============================================
+# 7. residualize TRAIN
+# ============================================
+
+print("\nResidualizing TRAIN features...")
+
+train_residualized = pd.DataFrame()
+
+confound_models = {}
+
+for col in feature_cols:
+
+    print(f"Processing: {col}")
+
+    y = train_df[col]
+
+    # ----------------------------------------
+    # handle NaN
+    # ----------------------------------------
+
+    valid_idx = y.notna()
+
+    y_valid = y[valid_idx]
+
+    X_valid = train_confounds.loc[valid_idx]
+
+    # ----------------------------------------
+    # fit confound regression
+    # ----------------------------------------
+
+    model = LinearRegression()
+
+    model.fit(
+        X_valid,
+        y_valid
+    )
+
+    # save model
+    confound_models[col] = model
+
+    # ----------------------------------------
+    # residualize
+    # ----------------------------------------
+
+    pred = model.predict(train_confounds)
+
+    residual = y - pred
+
+    train_residualized[col] = residual
+
+# ============================================
+# 8. add metadata back
+# ============================================
+
+train_residualized["subject_ID"] = train_df["subject_ID"]
+
+train_residualized["Age"] = train_df["Age"]
+
+train_residualized[GENDER_COL] = train_df[GENDER_COL]
+
+train_residualized[SCANNER_COL] = train_df[SCANNER_COL]
+
+# ============================================
+# 9. TRAIN X/y
+# ============================================
+
+X_train = train_residualized[feature_cols]
+
+y_train = train_residualized["Age"]
+
+print("\nTrain X shape:")
+print(X_train.shape)
+
+# ============================================
+# 10. imputer
+# ============================================
+
+imputer = SimpleImputer(
+    strategy="median"
+)
+
+X_train_imputed = imputer.fit_transform(
+    X_train
+)
+
+# ============================================
+# 11. scaler
+# ============================================
+
+scaler = StandardScaler()
+
+X_train_scaled = scaler.fit_transform(
+    X_train_imputed
+)
+
+# ============================================
+# 12. train SVR
+# ============================================
+
+print("\nTraining final SVR model...")
+
+svr_model = SVR(
+
+    kernel='rbf',
+
+    C=10,
+
+    epsilon=0.1
+)
+
+svr_model.fit(
+    X_train_scaled,
+    y_train
+)
+
+# ============================================
+# 13. read TEST
+# ============================================
+
+test_df = pd.read_excel(TEST_PATH)
+
+print("\nTest shape:")
+print(test_df.shape)
+
+# ============================================
+# 14. clean TEST column names
+# ============================================
+
+test_df.columns = [
+
+    str(c)
+    .strip()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("(", "")
+    .replace(")", "")
+    .replace("=", "_")
+    .replace("__", "_")
+
+    for c in test_df.columns
+]
+
+# ============================================
+# 15. TEST confounds
+# ============================================
+
+test_confounds = test_df[[
+    GENDER_COL,
+    SCANNER_COL
+]]
+
+test_confounds = pd.get_dummies(
+    test_confounds,
+    columns=[SCANNER_COL],
+    drop_first=True
+)
+
+# ----------------------------------------
+# align confound columns
+# ----------------------------------------
+
+test_confounds = test_confounds.reindex(
+    columns=train_confounds.columns,
+    fill_value=0
+)
+
+print("\nTest confounds:")
+print(test_confounds.columns.tolist())
+
+# ============================================
+# 16. residualize TEST
+# IMPORTANT:
+# use TRAIN confound models
+# ============================================
+
+print("\nResidualizing TEST features...")
+
+test_residualized = pd.DataFrame()
+
+for col in feature_cols:
+
+    print(f"Processing: {col}")
+
+    y_test_feature = test_df[col]
+
+    # ----------------------------------------
+    # use TRAIN confound model
+    # ----------------------------------------
+
+    model = confound_models[col]
+
+    pred = model.predict(
+        test_confounds
+    )
+
+    residual = y_test_feature - pred
+
+    test_residualized[col] = residual
+
+# ============================================
+# 17. align feature order
+# ============================================
+
+X_test = test_residualized[
+    feature_cols
+]
+
+print("\nTest X shape:")
+print(X_test.shape)
+
+# ============================================
+# 18. impute TEST
+# IMPORTANT:
+# use TRAIN imputer
+# ============================================
+
+X_test_imputed = imputer.transform(
+    X_test
+)
+
+# ============================================
+# 19. scale TEST
+# IMPORTANT:
+# use TRAIN scaler
+# ============================================
+
+X_test_scaled = scaler.transform(
+    X_test_imputed
+)
+
+# ============================================
+# 20. predict
+# ============================================
+
+print("\nPredicting brain age...")
+
+predicted_age = svr_model.predict(
+    X_test_scaled
+)
+
+# 四舍五入整数
+predicted_age = np.round(
+    predicted_age
+).astype(int)
+
+# ============================================
+# 21. save results
+# ============================================
+
+results_df = pd.DataFrame({
+
+    "subject_ID": test_df["subject_ID"],
+
+    "Predicted_Age": predicted_age
+})
+
+results_df.to_csv(
+    OUTPUT_PATH,
+    index=False
+)
+
+# ============================================
+# 22. summary
+# ============================================
+
+print("\n===================================")
+print("Prediction complete.")
+
+print("\nSaved:")
+print(OUTPUT_PATH)
+
+print("\nPrediction summary:")
+
+print(
+    pd.Series(predicted_age).describe()
+)
+
+print("\nPrediction variance:")
+
+print(
+    np.var(predicted_age)
+)
+
+print("\nDone.")

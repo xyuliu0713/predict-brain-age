@@ -2,7 +2,7 @@ import re
 import pandas as pd
 
 # Excel 文件路径
-file_path = "/Users/molin/Downloads/ML/Train/brain_age_features.xlsx"
+file_path = "/Users/molin/Downloads/ML2/Train/brain_age_features2.xlsx"
 
 # 读取 Excel
 df = pd.read_excel(file_path)

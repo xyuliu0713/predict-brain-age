@@ -1,0 +1,13 @@
+import pandas as pd
+
+f = "/Users/molin/Downloads/ML/Test/lh.GausCurv- 389.csv"
+
+df = pd.read_csv(f)
+
+print(df.shape)
+
+print(df.head())
+
+print(df.columns)
+
+print(df.iloc[:10, :5])

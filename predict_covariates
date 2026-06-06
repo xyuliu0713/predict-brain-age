@@ -1,17 +1,31 @@
 import pandas as pd
 
 from sklearn.preprocessing import StandardScaler
-
 from sklearn.svm import SVR
 import numpy as np
+# ============================================
+# 0. column names
+# ============================================
+
+GENDER_COL = "Gender_(1=Female,_2=Male)"
+SCANNER_COL = "MRI_scanner"
 
 # ============================================
 # 1. 读取 TRAIN
 # ============================================
 
 train_df = pd.read_excel(
-    "/Users/molin/Downloads/ML2/Train/brain_age_features3.xlsx"
+    "/Users/molin/Downloads/ML2/Train/brain_age_features2.xlsx"
 )
+
+# clean column names
+train_df.columns = [
+    str(c).strip()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("__", "_")
+    for c in train_df.columns
+]
 
 print("Train shape:")
 print(train_df.shape)
@@ -27,7 +41,20 @@ X_train = train_df.drop(
 y_train = train_df["Age"]
 
 # ============================================
-# 3. Standardization
+# 3. Encode categorical covariates
+# ============================================
+
+X_train = pd.get_dummies(
+    X_train,
+    columns=[GENDER_COL, SCANNER_COL],
+    drop_first=True
+)
+
+# 保存 feature names
+train_feature_columns = X_train.columns
+
+# ============================================
+# 4. Standardization
 # ============================================
 
 scaler = StandardScaler()
@@ -37,15 +64,12 @@ X_train_scaled = scaler.fit_transform(
 )
 
 # ============================================
-# 4. SVR model
+# 5. SVR model
 # ============================================
 
 model = SVR(
-
     kernel='rbf',
-
     C=10,
-
     epsilon=0.1
 )
 
@@ -59,36 +83,61 @@ model.fit(
 print("Training done.")
 
 # ============================================
-# 5. 读取 TEST
+# 6. 读取 TEST
 # ============================================
 
 test_df = pd.read_excel(
-    "/Users/molin/Downloads/ML2/Test/brain_age_test_features3.xlsx"
+    "/Users/molin/Downloads/ML2/Test/brain_age_test_features2.xlsx"
 )
+
+# clean column names
+test_df.columns = [
+    str(c).strip()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("__", "_")
+    for c in test_df.columns
+]
 
 print("\nTest shape:")
 print(test_df.shape)
 
 # ============================================
-# 6. 保存 subject IDs
+# 7. 保存 subject IDs
 # ============================================
 
 subject_ids = test_df["subject_ID"]
 
 # ============================================
-# 7. TEST X
+# 8. TEST X
 # ============================================
 
 X_test = test_df.drop(
     columns=["subject_ID"]
 )
 
-# VERY IMPORTANT
-# feature order must match
-X_test = X_test[X_train.columns]
+# ============================================
+# 9. Encode categorical covariates
+# ============================================
+
+X_test = pd.get_dummies(
+    X_test,
+    columns=[GENDER_COL, SCANNER_COL],
+    drop_first=True
+)
 
 # ============================================
-# 8. scaler transform
+# 10. VERY IMPORTANT
+# feature order must match training
+# ============================================
+
+X_test = X_test.reindex(
+    columns=train_feature_columns,
+    fill_value=0
+)
+
+# ============================================
+# 11. scaler transform
 # ============================================
 
 X_test_scaled = scaler.transform(
@@ -96,12 +145,10 @@ X_test_scaled = scaler.transform(
 )
 
 # ============================================
-# 9. predict
+# 12. predict
 # ============================================
 
 print("\nPredicting brain age...")
-
-
 
 predicted_age = np.round(
     model.predict(X_test_scaled)
@@ -110,7 +157,7 @@ predicted_age = np.round(
 print("Prediction done.")
 
 # ============================================
-# 10. 保存结果
+# 13. 保存结果
 # ============================================
 
 results = pd.DataFrame({
@@ -132,7 +179,7 @@ results.to_csv(
 )
 
 # ============================================
-# 11. 输出结果
+# 14. 输出结果
 # ============================================
 
 print("\n===================================")

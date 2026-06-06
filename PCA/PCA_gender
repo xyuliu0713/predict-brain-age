@@ -1,0 +1,194 @@
+import pandas as pd
+import numpy as np
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+
+import matplotlib.pyplot as plt
+
+# ============================================
+# 1. Load data
+# ============================================
+
+DATA_PATH = (
+    "/Users/molin/Downloads/ML/Train/"
+    "brain_age_features2.xlsx"
+)
+
+df = pd.read_excel(DATA_PATH)
+
+print("Data shape:")
+print(df.shape)
+
+# ============================================
+# 2. Clean column names
+# ============================================
+
+df.columns = [
+
+    str(c)
+    .strip()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("__", "_")
+
+    for c in df.columns
+]
+
+print("\nColumns:")
+print(df.columns)
+
+# ============================================
+# 3. Define gender column
+# ============================================
+
+GENDER_COL = "Gender_(1=Female,_2=Male)"
+
+# ============================================
+# 4. Extract features
+# ============================================
+
+X = df.drop(
+    columns=[
+        "subject_ID",
+        "Age",
+        GENDER_COL,
+        "MRI_scanner"
+    ]
+)
+
+print("\nFeature matrix shape:")
+print(X.shape)
+
+# ============================================
+# 5. Standardization
+# ============================================
+
+scaler = StandardScaler()
+
+X_scaled = scaler.fit_transform(X)
+
+print("\nScaling complete.")
+
+# ============================================
+# 6. PCA
+# ============================================
+
+pca = PCA(
+    n_components=2,
+    random_state=42
+)
+
+X_pca = pca.fit_transform(X_scaled)
+
+print("\nPCA complete.")
+
+print("PCA shape:")
+print(X_pca.shape)
+
+# ============================================
+# 7. Explained variance
+# ============================================
+
+explained = pca.explained_variance_ratio_
+
+print("\nExplained variance ratio:")
+
+print(f"PC1: {explained[0]:.3f}")
+print(f"PC2: {explained[1]:.3f}")
+print(f"Total: {explained.sum():.3f}")
+
+# ============================================
+# 8. Create PCA dataframe
+# ============================================
+
+pca_df = pd.DataFrame({
+
+    "subject_ID": df["subject_ID"],
+
+    "PC1": X_pca[:,0],
+
+    "PC2": X_pca[:,1],
+
+    "Gender": df[GENDER_COL]
+})
+
+# ============================================
+# 9. Replace gender numbers with labels
+# ============================================
+
+pca_df["Gender"] = pca_df["Gender"].map({
+
+    1: "Female",
+    2: "Male"
+})
+
+# ============================================
+# 10. PCA visualization by gender
+# ============================================
+
+plt.figure(figsize=(8,6))
+
+genders = pca_df["Gender"].unique()
+
+for gender in genders:
+
+    subset = pca_df[
+        pca_df["Gender"] == gender
+    ]
+
+    plt.scatter(
+
+        subset["PC1"],
+        subset["PC2"],
+
+        label=gender,
+
+        alpha=0.7
+    )
+
+plt.xlabel("PC1")
+
+plt.ylabel("PC2")
+
+plt.title(
+    "PCA of Brain Morphometry by Gender"
+)
+
+plt.legend()
+
+plt.tight_layout()
+
+pca_fig = (
+    "/Users/molin/Downloads/ML/Train/"
+    "PCA_gender_effect.png"
+)
+
+plt.savefig(
+    pca_fig,
+    dpi=300
+)
+
+print("\nSaved PCA figure:")
+print(pca_fig)
+
+plt.show()
+
+# ============================================
+# 11. Save results
+# ============================================
+
+output_path = (
+    "/Users/molin/Downloads/ML/Train/"
+    "pca_gender_results.csv"
+)
+
+pca_df.to_csv(
+    output_path,
+    index=False
+)
+
+print("\nSaved:")
+print(output_path)
+
+print("\nDone.")

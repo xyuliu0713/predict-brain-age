@@ -1,0 +1,196 @@
+import pandas as pd
+import numpy as np
+
+from sklearn.linear_model import LinearRegression
+
+# ============================================
+# 1. 读取数据
+# ============================================
+
+DATA_PATH = (
+    "/Users/molin/Downloads/ML2/Train/"
+    "brain_age_features2.xlsx"
+)
+
+df = pd.read_excel(DATA_PATH)
+
+print("Data shape:")
+print(df.shape)
+
+# ============================================
+# 2. 清洗 column names
+# ============================================
+
+df.columns = [
+
+    str(c)
+    .strip()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("(", "")
+    .replace(")", "")
+    .replace("=", "_")
+    .replace("__", "_")
+
+    for c in df.columns
+]
+
+print("\nColumns:")
+print(df.columns.tolist())
+
+# ============================================
+# 3. 定义 covariates
+# ============================================
+
+# 这里根据你真实column名字改
+
+GENDER_COL = "Gender_1_Female,_2_Male"
+SCANNER_COL = "MRI_scanner"
+
+# ============================================
+# 4. ROI features
+# ============================================
+
+exclude_cols = [
+
+    "subject_ID",
+    "Age",
+    GENDER_COL,
+    SCANNER_COL
+]
+
+feature_cols = [
+
+    c for c in df.columns
+
+    if c not in exclude_cols
+]
+
+print("\nNumber of ROI features:")
+print(len(feature_cols))
+
+# ============================================
+# 5. confound dataframe
+# ============================================
+
+confounds = df[[
+    GENDER_COL,
+    SCANNER_COL
+]]
+
+# ============================================
+# 6. one-hot encoding scanner
+# ============================================
+
+confounds = pd.get_dummies(
+    confounds,
+    columns=[SCANNER_COL],
+    drop_first=True
+)
+
+print("\nConfound columns:")
+print(confounds.columns.tolist())
+
+# ============================================
+# 7. residualization
+# ============================================
+
+residualized_features = pd.DataFrame(
+    index=df.index
+)
+
+print("\nResidualizing ROI features...")
+
+for col in feature_cols:
+
+    print(f"Processing: {col}")
+
+    # 当前feature
+    y_feature = df[col]
+
+    # 当前feature非NaN mask
+    valid_mask = y_feature.notna()
+
+    # 如果有效数据太少
+    if valid_mask.sum() < 10:
+
+        residualized_features[col] = np.nan
+        continue
+
+    # 只保留有效数据
+    y_valid = y_feature[valid_mask]
+
+    X_valid = confounds.loc[valid_mask]
+
+    # linear regression
+    model = LinearRegression()
+
+    model.fit(
+        X_valid,
+        y_valid
+    )
+
+    # predicted confound effect
+    pred = model.predict(X_valid)
+
+    # residual
+    residual = y_valid - pred
+
+    # 先整列设为NaN
+    residualized_features[col] = np.nan
+
+    # 再填回有效位置
+    residualized_features.loc[
+        valid_mask,
+        col
+    ] = residual
+
+# ============================================
+# 8. 添加 metadata
+# ============================================
+
+residualized_features["subject_ID"] = df["subject_ID"]
+
+residualized_features["Age"] = df["Age"]
+
+residualized_features[GENDER_COL] = df[GENDER_COL]
+
+residualized_features[SCANNER_COL] = df[SCANNER_COL]
+
+# ============================================
+# 9. 调整 column 顺序
+# ============================================
+
+cols = (
+    ["subject_ID", "Age",
+     GENDER_COL, SCANNER_COL]
+    +
+    feature_cols
+)
+
+residualized_features = residualized_features[
+    cols
+]
+
+# ============================================
+# 10. 保存
+# ============================================
+
+OUTPUT_PATH = (
+    "/Users/molin/Downloads/ML2/Train/"
+    "brain_age_features_residualized.xlsx"
+)
+
+residualized_features.to_excel(
+    OUTPUT_PATH,
+    index=False
+)
+
+print("\n===================================")
+print("Residualization complete.")
+
+print("\nSaved:")
+print(OUTPUT_PATH)
+
+print("\nFinal shape:")
+print(residualized_features.shape)

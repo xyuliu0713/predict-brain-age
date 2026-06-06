@@ -1,0 +1,41 @@
+
+
+import pandas as pd
+
+# 读取数据
+file_path = "/Users/molin/Downloads/ML2/Train/split_age2/brain_age_young2.xlsx"
+# file_path = "/Users/molin/Downloads/ML2/Train/split_age2/brain_age_old2.xlsx"
+df = pd.read_excel(file_path)
+
+# 清理列名空格（避免报错）
+df.columns = df.columns.str.strip()
+
+# （可选）确保Gender是int
+df["Gender (1=Female, 2=Male)"] = df["Gender (1=Female, 2=Male)"].astype(int)
+
+# 定义输出路径
+output_dir = "/Users/molin/Downloads/ML2/Train/split_age"
+
+# 分组
+female_ge = df[(df["Gender (1=Female, 2=Male)"] == 1) & (df["MRI scanner"] == "GE")]
+female_siemens = df[(df["Gender (1=Female, 2=Male)"] == 1) & (df["MRI scanner"] == "SIEMENS")]
+male_ge = df[(df["Gender (1=Female, 2=Male)"] == 2) & (df["MRI scanner"] == "GE")]
+male_siemens = df[(df["Gender (1=Female, 2=Male)"] == 2) & (df["MRI scanner"] == "SIEMENS")]
+
+# 保存为4个独立Excel文件
+female_ge.to_excel(output_dir + "Female_GE_young.xlsx", index=False)
+female_siemens.to_excel(output_dir + "Female_SIEMENS_young.xlsx", index=False)
+male_ge.to_excel(output_dir + "Male_GE_young.xlsx", index=False)
+male_siemens.to_excel(output_dir + "Male_SIEMENS_young.xlsx", index=False)
+
+# female_ge.to_excel(output_dir + "Female_GE_middle.xlsx", index=False)
+# female_siemens.to_excel(output_dir + "Female_SIEMENS_middle.xlsx", index=False)
+# male_ge.to_excel(output_dir + "Male_GE_middle.xlsx", index=False)
+# male_siemens.to_excel(output_dir + "Male_SIEMENS_middle.xlsx", index=False)
+
+# female_ge.to_excel(output_dir + "Female_GE_old.xlsx", index=False)
+# female_siemens.to_excel(output_dir + "Female_SIEMENS_old.xlsx", index=False)
+# male_ge.to_excel(output_dir + "Male_GE_old.xlsx", index=False)
+# male_siemens.to_excel(output_dir + "Male_SIEMENS_old.xlsx", index=False)
+
+print("Done! 4 files saved in:", output_dir)

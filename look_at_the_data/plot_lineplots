@@ -1,0 +1,72 @@
+import os
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# 文件路径
+file_path = "/Users/molin/Downloads/ML/Train/brain_age_features2.xlsx"
+
+# 输出目录
+output_dir = "/Users/molin/Downloads/ML/Train/age_lineplots1"
+os.makedirs(output_dir, exist_ok=True)
+
+# 读取数据
+df = pd.read_excel(file_path)
+
+# 自动寻找 age 列（忽略大小写）
+age_col = None
+for col in df.columns:
+    if col.lower() == "age":
+        age_col = col
+        break
+
+if age_col is None:
+    raise ValueError("没有找到 age 列，请检查表头。")
+
+# 需要排除的列
+exclude_cols = [
+    "subject_ID",
+    "Gender (1=Female, 2=Male)",
+    "MRI scanner"
+]
+
+# 获取需要画图的列
+feature_cols = [col for col in df.columns if col not in exclude_cols + [age_col]]
+
+
+# 按 age 排序
+df = df.sort_values(by=age_col)
+    
+# 按 age 排序（让折线图更自然）
+df = df.sort_values(by=age_col)
+
+# 逐列画图
+for feature in feature_cols:
+
+    plt.figure(figsize=(8, 5))
+
+    plt.plot(
+        df[age_col],
+        df[feature],
+        marker='o',
+        linewidth=1,
+        markersize=2,
+    )
+
+    plt.xlabel("Age")
+    plt.ylabel(feature)
+    plt.title(f"{feature} vs age")
+
+    plt.grid(True)
+
+    # 文件名安全化
+    safe_name = feature.replace("/", "_").replace("\\", "_")
+
+    save_path = os.path.join(
+        output_dir,
+        f"{safe_name}_vs_age.png"
+    )
+
+    plt.savefig(save_path, dpi=300, bbox_inches='tight')
+    plt.close()
+
+print(f"所有折线图已保存到: {output_dir}")

@@ -4,6 +4,7 @@ from sklearn.preprocessing import StandardScaler
 
 from sklearn.svm import SVR
 
+import numpy as np
 # ============================================
 
 # 1. READ TRAIN
@@ -12,7 +13,7 @@ from sklearn.svm import SVR
 
 train_df = pd.read_excel(
 
-    "/Users/molin/Downloads/ML/Train/brain_age_features.xlsx"
+    "/Users/molin/Downloads/ML2/Train/brain_age_features3.xlsx"
 
 )
 
@@ -28,11 +29,11 @@ print(train_df.shape)
 
 X_train = train_df.drop(
 
-    columns=["subject_ID", "age"]
+    columns=["subject_ID", "Age"]
 
 )
 
-y_train = train_df["age"]
+y_train = train_df["Age"]
 
 
 # ============================================
@@ -81,7 +82,7 @@ print("Training done.")
 
 test_df = pd.read_excel(
 
-    "/Users/molin/Downloads/ML/Test/brain_age_test_features.xlsx"
+    "/Users/molin/Downloads/ML2/Test/brain_age_test_features2.xlsx"
 
 )
 
@@ -96,7 +97,7 @@ print(test_df.shape)
 # ============================================
 
 scanner_df = pd.read_csv(
-    "/Users/molin/Downloads/ML/Test/subject_info - 389.csv",
+    "/Users/molin/Downloads/ML2/Test/subject_info - 389.csv",
     encoding='latin1'
 )
 
@@ -196,11 +197,10 @@ def predict_brain_age(group_df):
 
     # predict
 
-    predicted_age = model.predict(
+    predicted_age = np.round(
+        model.predict(X_group_scaled)
+    ).astype(int)
 
-        X_group_scaled
-
-    )
 
     results = pd.DataFrame({
 
@@ -242,7 +242,7 @@ siemens_results = predict_brain_age(siemens_df)
 
 ge_output = (
 
-    "/Users/molin/Downloads/ML/Test/"
+    "/Users/molin/Downloads/ML2/Test/"
 
     "predicted_brain_age_GE.csv"
 
@@ -250,7 +250,7 @@ ge_output = (
 
 siemens_output = (
 
-    "/Users/molin/Downloads/ML/Test/"
+    "/Users/molin/Downloads/ML2/Test/"
 
     "predicted_brain_age_SIEMENS.csv"
 

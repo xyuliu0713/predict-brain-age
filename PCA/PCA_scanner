@@ -1,0 +1,196 @@
+import pandas as pd
+import numpy as np
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+
+import matplotlib.pyplot as plt
+
+# ============================================
+# 1. Load data
+# ============================================
+
+DATA_PATH = (
+    "/Users/molin/Downloads/ML/Train/"
+    "brain_age_features2.xlsx"
+)
+
+df = pd.read_excel(DATA_PATH)
+
+print("Data shape:")
+print(df.shape)
+
+# ============================================
+# 2. Clean column names
+# ============================================
+
+df.columns = [
+
+    str(c)
+    .strip()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("__", "_")
+
+    for c in df.columns
+]
+
+print("\nColumns:")
+print(df.columns)
+
+# ============================================
+# 3. Define scanner column
+# ============================================
+
+SCANNER_COL = "MRI_scanner"
+
+# 改成你真实的scanner列名
+# 比如：
+# SCANNER_COL = "site"
+# SCANNER_COL = "MRI_scanner"
+
+# ============================================
+# 4. Extract features
+# ============================================
+
+X = df.drop(
+    columns=[
+        "subject_ID",
+        "Age",
+        SCANNER_COL
+    ]
+)
+
+print("\nFeature matrix shape:")
+print(X.shape)
+
+# ============================================
+# 5. Standardization
+# ============================================
+
+scaler = StandardScaler()
+
+X_scaled = scaler.fit_transform(X)
+
+print("\nScaling complete.")
+
+# ============================================
+# 6. PCA
+# ============================================
+
+pca = PCA(
+    n_components=2,
+    random_state=42
+)
+
+X_pca = pca.fit_transform(X_scaled)
+
+print("\nPCA complete.")
+
+print("PCA shape:")
+print(X_pca.shape)
+
+# ============================================
+# 7. Explained variance
+# ============================================
+
+explained = pca.explained_variance_ratio_
+
+print("\nExplained variance ratio:")
+
+print(
+    f"PC1: {explained[0]:.3f}"
+)
+
+print(
+    f"PC2: {explained[1]:.3f}"
+)
+
+print(
+    f"Total: {explained.sum():.3f}"
+)
+
+# ============================================
+# 8. Create PCA dataframe
+# ============================================
+
+pca_df = pd.DataFrame({
+
+    "subject_ID": df["subject_ID"],
+
+    "PC1": X_pca[:,0],
+
+    "PC2": X_pca[:,1],
+
+    "Scanner": df[SCANNER_COL]
+})
+
+# ============================================
+# 9. PCA visualization by scanner
+# ============================================
+
+plt.figure(figsize=(8,6))
+
+scanners = pca_df["Scanner"].unique()
+
+for scanner in scanners:
+
+    subset = pca_df[
+        pca_df["Scanner"] == scanner
+    ]
+
+    plt.scatter(
+
+        subset["PC1"],
+        subset["PC2"],
+
+        label=scanner,
+
+        alpha=0.7
+    )
+
+plt.xlabel("PC1")
+
+plt.ylabel("PC2")
+
+plt.title(
+    "PCA of Brain Morphometry by MRI Scanner"
+)
+
+plt.legend()
+
+plt.tight_layout()
+
+pca_fig = (
+    "/Users/molin/Downloads/ML/Train/"
+    "PCA_scanner_effect.png"
+)
+
+plt.savefig(
+    pca_fig,
+    dpi=300
+)
+
+print("\nSaved PCA figure:")
+print(pca_fig)
+
+plt.show()
+
+# ============================================
+# 10. Save results
+# ============================================
+
+output_path = (
+    "/Users/molin/Downloads/ML/Train/"
+    "pca_scanner_results.csv"
+)
+
+pca_df.to_csv(
+    output_path,
+    index=False
+)
+
+print("\nSaved:")
+print(output_path)
+
+print("\nDone.")

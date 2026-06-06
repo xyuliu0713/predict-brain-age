@@ -1,0 +1,556 @@
+# ============================================
+# Brain Age Prediction
+# Leakage-safe Pipeline Version
+# MAE = 4.053984575835476
+# ============================================
+
+import os
+
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+
+import numpy as np
+import pandas as pd
+
+from sklearn.model_selection import (
+    KFold,
+    GridSearchCV
+)
+
+from sklearn.pipeline import Pipeline
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.decomposition import PCA
+
+from sklearn.svm import SVR
+
+from sklearn.metrics import (
+    mean_absolute_error,
+    r2_score
+)
+
+from scipy.stats import pearsonr
+
+# ============================================
+# Reproducibility
+# ============================================
+
+np.random.seed(42)
+
+# ============================================
+# 1. Load training data
+# ============================================
+
+DATA_PATH = ("/Users/molin/Downloads/ML2/Train/split_age2/brain_age_young2.xlsx")
+# "/Users/molin/Downloads/ML2/Train/split_age2/brain_age_old2.xlsx"
+
+df = pd.read_excel(DATA_PATH)
+
+print("===================================")
+print("TRAIN DATA LOADED")
+print("===================================")
+
+print("\nTrain shape:")
+print(df.shape)
+
+# ============================================
+# 2. Clean column names
+# ============================================
+
+def clean_columns(dataframe):
+
+    dataframe.columns = [
+
+        str(c)
+        .strip()
+        .replace(" ", "_")
+        .replace("-", "_")
+        .replace("(", "")
+        .replace(")", "")
+        .replace("=", "_")
+        .replace("__", "_")
+
+        for c in dataframe.columns
+    ]
+
+    return dataframe
+
+
+df = clean_columns(df)
+
+print("\nColumns cleaned.")
+
+# ============================================
+# 3. Metadata columns
+# ============================================
+
+AGE_COL = "Age"
+
+GENDER_COL = "Gender_1_Female,_2_Male"
+
+SCANNER_COL = "MRI_scanner"
+
+Age_Group_COL = "Age_Group"
+
+exclude_cols = [
+
+    "subject_ID",
+
+    AGE_COL,
+
+    GENDER_COL,
+
+    SCANNER_COL,
+    Age_Group_COL
+]
+
+feature_cols = [
+
+    c for c in df.columns
+
+    if c not in exclude_cols
+]
+
+print("\nNumber of features:")
+print(len(feature_cols))
+
+# ============================================
+# 5. X and y
+# ============================================
+
+X = df[feature_cols]
+
+y = df[AGE_COL]
+
+print("\nX shape:")
+print(X.shape)
+
+print("\ny shape:")
+print(y.shape)
+
+# ============================================
+# 6. 10-fold CV
+# ============================================
+
+kf = KFold(
+
+    n_splits=10,
+
+    shuffle=True,
+
+    random_state=42
+)
+
+# ============================================
+# Store results
+# ============================================
+
+mae_list = []
+
+r2_list = []
+
+corr_list = []
+
+all_true = []
+
+all_pred = []
+
+fold = 1
+
+# ============================================
+# 7. Cross-validation loop
+# ============================================
+
+for train_idx, test_idx in kf.split(X):
+
+    print("\n===================================")
+    print(f"Fold {fold}")
+    print("===================================")
+
+    # ----------------------------------------
+    # Split data
+    # ----------------------------------------
+
+    X_train = X.iloc[train_idx]
+
+    X_test = X.iloc[test_idx]
+
+    y_train = y.iloc[train_idx]
+
+    y_test = y.iloc[test_idx]
+
+    # ========================================
+    # Pipeline
+    # ========================================
+
+    pipe = Pipeline([
+
+        ('scaler', StandardScaler()),
+
+        ('pca', PCA()),
+
+        ('svr', SVR(kernel='rbf'))
+    ])
+
+    # ========================================
+    # Parameter grid
+    # ========================================
+
+    param_grid = {
+
+        # 'pca__n_components': [0.90, 0.92, 0.94, 0.96, 0.98],
+
+        'svr__C': [
+            25,
+            50,
+            75,
+            100,
+            125,
+        ],
+
+        'svr__gamma': [
+
+            'scale',
+            0.0001,
+            0.0002,
+            0.0003,
+            0.0004,
+            0.0005,
+            0.0006,
+        ],
+
+        'svr__epsilon': [
+            0.5,
+            1,
+            1.25,
+            1.5,
+            2,
+            2.5
+        ]
+    }
+
+    # ========================================
+    # GridSearchCV
+    # ========================================
+
+    grid = GridSearchCV(
+
+        estimator=pipe,
+
+        param_grid=param_grid,
+
+        cv=5,
+
+        scoring='neg_mean_absolute_error',
+
+        n_jobs=-1
+    )
+
+    # ========================================
+    # Train model
+    # ========================================
+
+    grid.fit(
+
+        X_train,
+
+        y_train
+    )
+
+    # ========================================
+    # Best parameters
+    # ========================================
+
+    print("\nBest parameters:")
+
+    print(grid.best_params_)
+
+    # ========================================
+    # Best model
+    # ========================================
+
+    best_model = grid.best_estimator_
+
+
+    # ========================================
+# Train model directly
+# ========================================
+
+    pipe.fit(
+
+        X_train,
+
+        y_train
+    )
+
+    best_model = pipe
+    # ========================================
+    # Predict
+    # ========================================
+
+    y_pred = best_model.predict(
+
+        X_test
+    )
+
+    # ========================================
+    # Metrics
+    # ========================================
+
+    mae = mean_absolute_error(
+
+        y_test,
+
+        y_pred
+    )
+
+    r2 = r2_score(
+
+        y_test,
+
+        y_pred
+    )
+
+    corr, p_value = pearsonr(
+
+        y_test,
+
+        y_pred
+    )
+
+    print(f"\nMAE: {mae:.2f}")
+
+    print(f"R²: {r2:.3f}")
+
+    print(f"Correlation: {corr:.3f}")
+
+    # ========================================
+    # Save fold results
+    # ========================================
+
+    mae_list.append(mae)
+
+    r2_list.append(r2)
+
+    corr_list.append(corr)
+
+    all_true.extend(y_test)
+
+    all_pred.extend(y_pred)
+
+    fold += 1
+
+# ============================================
+# 8. Final CV results
+# ============================================
+
+print("\n===================================")
+print("FINAL RESULTS")
+print("===================================")
+
+print(
+    f"\nMean MAE: "
+    f"{np.mean(mae_list):.2f}"
+)
+
+print(
+    f"STD MAE: "
+    f"{np.std(mae_list):.2f}"
+)
+
+print(
+    f"\nMean R²: "
+    f"{np.mean(r2_list):.3f}"
+)
+
+print(
+    f"STD R²: "
+    f"{np.std(r2_list):.3f}"
+)
+
+print(
+    f"\nMean Correlation: "
+    f"{np.mean(corr_list):.3f}"
+)
+
+# ============================================
+# 9. Brain Age Gap
+# ============================================
+
+brain_age_gap = (
+
+    np.array(all_pred)
+
+    -
+
+    np.array(all_true)
+)
+
+print("\nBrain Age Gap summary:")
+
+print(
+    pd.Series(brain_age_gap).describe()
+)
+
+# ============================================
+# 10. Save CV predictions
+# ============================================
+
+results_df = pd.DataFrame({
+
+    "True_Age": all_true,
+
+    "Predicted_Age": all_pred,
+
+    "Brain_Age_Gap": brain_age_gap
+})
+
+CV_OUTPUT = (
+
+    "/Users/molin/Downloads/ML2/Train/"
+    "brain_age_young_predictions.csv"
+)
+
+results_df.to_csv(
+
+    CV_OUTPUT,
+
+    index=False
+)
+
+print("\nCV predictions saved:")
+
+print(CV_OUTPUT)
+
+# ============================================
+# 11. Train FINAL MODEL on full dataset
+# ============================================
+
+print("\n===================================")
+print("TRAINING FINAL MODEL")
+print("===================================")
+
+# ============================================
+# Best parameters from CV
+# (change if your best params differ)
+# ============================================
+
+final_model = Pipeline([
+
+    ('scaler', StandardScaler()),
+
+    ('pca', PCA(
+        n_components=350
+    )),
+
+    ('svr', SVR(
+
+        kernel='rbf',
+
+        C=100,
+
+        gamma=0.0005,
+
+        epsilon=2
+    ))
+])
+
+# ============================================
+# Train final model
+# ============================================
+
+final_model.fit(
+
+    X,
+
+    y
+)
+
+print("\nFinal model trained.")
+
+# ============================================
+# 12. Load TEST data
+# ============================================
+
+TEST_PATH = ("/Users/molin/Downloads/ML2/Test/split_age2/brain_age_test_features3_Young.xlsx")
+# "/Users/molin/Downloads/ML2/Test/split_age2/brain_age_test_features3_Old.xlsx"
+
+test_df = pd.read_excel(TEST_PATH)
+
+test_df = clean_columns(test_df)
+
+print("\n===================================")
+print("TEST DATA LOADED")
+print("===================================")
+
+print("\nTest shape:")
+print(test_df.shape)
+
+# ============================================
+# Test features
+# ============================================
+
+X_test_final = test_df[feature_cols]
+
+print("\nTest X shape:")
+print(X_test_final.shape)
+
+# ============================================
+# Predict test brain age
+# ============================================
+
+test_predictions = final_model.predict(
+
+    X_test_final
+)
+
+# ============================================
+# Save predictions
+# ============================================
+
+prediction_df = pd.DataFrame({
+
+    "Predicted_Age": np.round(
+        test_predictions
+    ).astype(int)
+})
+
+# Optional subject_ID
+
+if "subject_ID" in test_df.columns:
+
+    prediction_df.insert(
+
+        0,
+
+        "subject_ID",
+
+        test_df["subject_ID"]
+    )
+
+OUTPUT_PATH = (
+    "/Users/molin/Downloads/ML2/Test/"
+    "brain_age_young_test_predictions.csv"
+)
+
+prediction_df.to_csv(
+
+    OUTPUT_PATH,
+
+    index=False
+)
+
+print("\n===================================")
+print("TEST PREDICTIONS SAVED")
+print("===================================")
+
+print(OUTPUT_PATH)
+
+# ============================================
+# DONE
+# ============================================
+
+print("\n===================================")
+print("ALL ANALYSES FINISHED")
+print("===================================")

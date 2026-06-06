@@ -1,0 +1,103 @@
+import os
+import numpy as np
+import pandas as pd
+from scipy.stats import zscore
+from sklearn.linear_model import LinearRegression
+
+# 输入输出路径
+input_file = "/Users/molin/Downloads/ML2/Train/brain_age_features2.xlsx"
+output_file = "/Users/molin/Downloads/ML2/Train/brain_age_features3.xlsx"
+
+# input_file = "/Users/molin/Downloads/ML2/Test/brain_age_test_features2.xlsx"
+# output_file = "/Users/molin/Downloads/ML2/Test/brain_age_test_features3.xlsx"
+
+# 读取数据
+df = pd.read_excel(input_file)
+
+# 不参与异常检测的列
+exclude_cols = [
+    "subject_ID",
+    "Gender (1=Female, 2=Male)",
+    "MRI scanner",
+    "Age"
+]
+
+# age列
+age_col = "Age"
+
+# feature列
+feature_cols = [
+    col for col in df.columns
+    if col not in exclude_cols
+]
+
+print("开始检测异常cell...\n")
+
+# 记录修改数量
+total_removed = 0
+
+for feature in feature_cols:
+
+    # 跳过非数值列
+    if not pd.api.types.is_numeric_dtype(df[feature]):
+        continue
+
+    temp = df[[age_col, feature]].dropna()
+
+    # 数据太少跳过
+    if len(temp) < 10:
+        continue
+
+    y = temp[feature]
+    X = temp[[age_col]]
+
+    # =========================
+    # 1. 基于均值的异常
+    # =========================
+    z_scores = np.abs(zscore(y))
+    z_outliers = z_scores > 3
+
+    # =========================
+    # 2. 基于年龄趋势的异常
+    # =========================
+    model = LinearRegression()
+    model.fit(X, y)
+
+    pred = model.predict(X)
+
+    residuals = y - pred
+
+    residual_z = np.abs(zscore(residuals))
+    trend_outliers = residual_z > 3
+
+    # =========================
+    # 合并异常
+    # =========================
+    combined_outliers = z_outliers | trend_outliers
+
+    # 找到原始index
+    outlier_idx = temp.index[combined_outliers]
+
+    # =========================
+    # 用该列平均值替换异常值
+    # =========================
+
+    # 先计算当前列均值（不包含NaN）
+    col_mean = df[feature].mean(skipna=True)
+
+    # 仅替换异常点
+    df.loc[outlier_idx, feature] = col_mean
+
+    removed_num = len(outlier_idx)
+    total_removed += removed_num
+
+    print(f"{feature}: 替换 {removed_num} 个异常cell")
+
+print("\n====================")
+print(f"总共替换异常cell: {total_removed}")
+print("====================")
+
+# 保存
+df.to_excel(output_file, index=False)
+
+print(f"\n已保存:\n{output_file}")

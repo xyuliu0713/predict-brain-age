@@ -1,0 +1,238 @@
+import pandas as pd
+import numpy as np
+
+from sklearn.impute import SimpleImputer
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.svm import SVR
+
+# ============================================
+# 1. 路径
+# ============================================
+
+TRAIN_PATH = (
+    "/Users/molin/Downloads/ML2/Train/"
+    "brain_age_features2.xlsx"
+)
+
+TEST_PATH = (
+    "/Users/molin/Downloads/ML2/Test/"
+    "brain_age_test_features2.xlsx"
+)
+
+OUTPUT_PATH = (
+    "/Users/molin/Downloads/ML2/Test/"
+    "predicted_brain_age.csv"
+)
+
+# ============================================
+# 2. 读取 train
+# ============================================
+
+train_df = pd.read_excel(TRAIN_PATH)
+
+print("Train shape:")
+print(train_df.shape)
+
+# ============================================
+# 3. 清洗 train columns
+# ============================================
+
+train_df.columns = [
+
+    str(c)
+    .strip()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("(", "")
+    .replace(")", "")
+    .replace("=", "_")
+    .replace("__", "_")
+
+    for c in train_df.columns
+]
+
+# ============================================
+# 4. train X / y
+# ============================================
+
+exclude_cols = [
+
+    "subject_ID",
+
+    "Age",
+
+    "Gender_1_Female,_2_Male",
+
+    "MRI_scanner"
+]
+
+X_train = train_df.drop(
+    columns=exclude_cols
+)
+
+y_train = train_df["Age"]
+
+print("\nTrain X shape:")
+print(X_train.shape)
+
+# ============================================
+# 5. 读取 test
+# ============================================
+
+test_df = pd.read_excel(TEST_PATH)
+
+print("\nTest shape:")
+print(test_df.shape)
+
+# ============================================
+# 6. 清洗 test columns
+# ============================================
+
+test_df.columns = [
+
+    str(c)
+    .strip()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("(", "")
+    .replace(")", "")
+    .replace("=", "_")
+    .replace("__", "_")
+
+    for c in test_df.columns
+]
+
+# ============================================
+# 7. test features
+# ============================================
+
+X_test = test_df.drop(
+    columns=[
+        "subject_ID",
+        "Gender_1_Female,_2_Male",
+        "MRI_scanner"
+    ],
+    errors="ignore"
+)
+
+print("\nRaw test X shape:")
+print(X_test.shape)
+
+# ============================================
+# 8. feature alignment
+# VERY IMPORTANT
+# ============================================
+
+train_features = X_train.columns.tolist()
+
+# 按train feature对齐
+X_test = X_test.reindex(
+    columns=train_features
+)
+
+print("\nAligned test X shape:")
+print(X_test.shape)
+
+# ============================================
+# 9. NaN检查
+# ============================================
+
+print("\nNaN percentage in test:")
+
+print(
+    X_test.isna().mean().mean()
+)
+
+# ============================================
+# 10. imputer
+# ============================================
+
+imputer = SimpleImputer(
+    strategy="median"
+)
+
+X_train_imputed = imputer.fit_transform(
+    X_train
+)
+
+X_test_imputed = imputer.transform(
+    X_test
+)
+
+# ============================================
+# 11. scaler
+# ============================================
+
+scaler = StandardScaler()
+
+X_train_scaled = scaler.fit_transform(
+    X_train_imputed
+)
+
+X_test_scaled = scaler.transform(
+    X_test_imputed
+)
+
+# ============================================
+# 12. train final SVR
+# ============================================
+
+model = SVR(
+
+    kernel='rbf',
+
+    C=10,
+
+    epsilon=0.1
+)
+
+print("\nTraining final SVR model...")
+
+model.fit(
+    X_train_scaled,
+    y_train
+)
+
+# ============================================
+# 13. predict
+# ============================================
+
+print("\nPredicting brain age...")
+
+pred_age = model.predict(
+    X_test_scaled
+)
+# 四舍五入整数
+pred_age = np.round(
+    pred_age
+).astype(int)
+
+# ============================================
+# 14. 保存结果
+# ============================================
+
+results_df = pd.DataFrame({
+
+    "subject_ID": test_df["subject_ID"],
+
+    "Predicted_Brain_Age": pred_age
+})
+
+results_df.to_csv(
+    OUTPUT_PATH,
+    index=False
+)
+
+print("\n===================================")
+print("Prediction complete.")
+
+print("\nSaved:")
+print(OUTPUT_PATH)
+
+print("\nPrediction summary:")
+
+print(
+    pd.Series(pred_age).describe()
+)

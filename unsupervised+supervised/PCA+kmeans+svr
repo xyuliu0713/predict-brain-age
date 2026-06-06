@@ -1,0 +1,389 @@
+# MAE = 3.969151670951157
+import pandas as pd
+import numpy as np
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
+from sklearn.svm import SVR
+
+from sklearn.metrics import (
+    mean_absolute_error,
+    r2_score
+)
+
+# =====================================================
+# 1. PATHS
+# =====================================================
+
+TRAIN_PATH = (
+    "/Users/molin/Downloads/ML2/Train/"
+    "brain_age_features2.xlsx"
+)
+
+TEST_PATH = (
+    "/Users/molin/Downloads/ML2/Test/"
+    "brain_age_test_features3.xlsx"
+)
+
+OUTPUT_PATH = (
+    "/Users/molin/Downloads/ML2/Test/"
+    "brain_age_test_predictions.csv"
+)
+
+# =====================================================
+# 2. LOAD DATA
+# =====================================================
+
+train_df = pd.read_excel(TRAIN_PATH)
+
+test_df = pd.read_excel(TEST_PATH)
+
+print("Train shape:")
+print(train_df.shape)
+
+print("\nTest shape:")
+print(test_df.shape)
+
+# =====================================================
+# 3. CLEAN COLUMN NAMES
+# =====================================================
+
+def clean_columns(df):
+
+    df.columns = [
+
+        str(c)
+        .strip()
+        .replace(" ", "_")
+        .replace("-", "_")
+        .replace("(", "")
+        .replace(")", "")
+        .replace("=", "_")
+        .replace("__", "_")
+
+        for c in df.columns
+    ]
+
+    return df
+
+train_df = clean_columns(train_df)
+
+test_df = clean_columns(test_df)
+
+# =====================================================
+# 4. DEFINE METADATA COLUMNS
+# =====================================================
+
+AGE_COL = "Age"
+
+GENDER_COL = "Gender_1_Female,_2_Male"
+
+SCANNER_COL = "MRI_scanner"
+
+# =====================================================
+# 5. DEFINE FEATURE COLUMNS
+# =====================================================
+
+exclude_cols = [
+
+    "subject_ID",
+
+    AGE_COL,
+
+    GENDER_COL,
+
+    SCANNER_COL
+]
+
+feature_cols = [
+
+    c for c in train_df.columns
+
+    if c not in exclude_cols
+]
+
+print("\nNumber of ROI features:")
+print(len(feature_cols))
+
+# =====================================================
+# 6. TRAIN FEATURES
+# =====================================================
+
+X_train = train_df[feature_cols]
+
+y_train = train_df[AGE_COL]
+
+# =====================================================
+# 7. TEST FEATURES
+# =====================================================
+
+X_test = test_df[feature_cols]
+
+# 如果test有真实年龄
+if AGE_COL in test_df.columns:
+
+    y_test = test_df[AGE_COL]
+
+else:
+
+    y_test = None
+
+# =====================================================
+# 8. STANDARDIZATION
+# IMPORTANT:
+# fit ONLY on training data
+# =====================================================
+
+print("\nRunning StandardScaler...")
+
+scaler = StandardScaler()
+
+X_train_scaled = scaler.fit_transform(X_train)
+
+X_test_scaled = scaler.transform(X_test)
+
+# =====================================================
+# 9. PCA
+# IMPORTANT:
+# fit ONLY on training data
+# =====================================================
+
+print("\nRunning PCA...")
+
+pca = PCA(
+    n_components=30,
+    random_state=42
+)
+
+X_train_pca = pca.fit_transform(
+    X_train_scaled
+)
+
+X_test_pca = pca.transform(
+    X_test_scaled
+)
+
+print("Train PCA shape:")
+print(X_train_pca.shape)
+
+print("Test PCA shape:")
+print(X_test_pca.shape)
+
+explained = np.sum(
+    pca.explained_variance_ratio_
+)
+
+print(
+    f"Explained variance = "
+    f"{explained:.3f}"
+)
+
+# =====================================================
+# 10. KMEANS CLUSTERING
+# fit ONLY on train
+# =====================================================
+
+print("\nRunning KMeans clustering...")
+
+N_CLUSTERS = 4
+
+kmeans = KMeans(
+
+    n_clusters=N_CLUSTERS,
+
+    random_state=42,
+
+    n_init=20
+)
+
+# train clusters
+train_clusters = kmeans.fit_predict(
+    X_train_pca
+)
+
+# test clusters
+test_clusters = kmeans.predict(
+    X_test_pca
+)
+
+train_df["Cluster"] = train_clusters
+
+test_df["Cluster"] = test_clusters
+
+print("\nTrain cluster counts:")
+print(
+    train_df["Cluster"].value_counts()
+)
+
+print("\nTest cluster counts:")
+print(
+    test_df["Cluster"].value_counts()
+)
+
+# =====================================================
+# 11. TRAIN CLUSTER-SPECIFIC SVR MODELS
+# =====================================================
+
+print("\n====================================")
+print("Training Cluster-specific SVR")
+print("====================================")
+
+cluster_models = {}
+
+cluster_scalers = {}
+
+for c in range(N_CLUSTERS):
+
+    print("\n--------------------------------")
+    print(f"Cluster {c}")
+    print("--------------------------------")
+
+    sub = train_df[
+        train_df["Cluster"] == c
+    ]
+
+    print(f"N = {len(sub)}")
+
+    if len(sub) < 50:
+
+        print("Too small. Skipping.")
+
+        continue
+
+    X_sub = sub[feature_cols]
+
+    y_sub = sub[AGE_COL]
+
+    # scaler for THIS cluster
+    cluster_scaler = StandardScaler()
+
+    X_sub_scaled = cluster_scaler.fit_transform(
+        X_sub
+    )
+
+    # SVR model
+    model = SVR(
+
+        kernel='rbf',
+
+        C=10,
+
+        epsilon=0.1
+    )
+
+    model.fit(
+        X_sub_scaled,
+        y_sub
+    )
+
+    cluster_models[c] = model
+
+    cluster_scalers[c] = cluster_scaler
+
+    print("Model trained.")
+
+# =====================================================
+# 12. PREDICT TEST BRAIN AGE
+# =====================================================
+
+print("\n====================================")
+print("Predicting Brain Age")
+print("====================================")
+
+predicted_ages = []
+
+for idx in range(len(test_df)):
+
+    cluster = test_df.iloc[idx]["Cluster"]
+
+    # 如果cluster没有model
+    if cluster not in cluster_models:
+
+        predicted_ages.append(np.nan)
+
+        continue
+
+    model = cluster_models[cluster]
+
+    scaler_cluster = cluster_scalers[cluster]
+
+    row = test_df.iloc[[idx]][feature_cols]
+
+    row_scaled = scaler_cluster.transform(row)
+
+    pred = model.predict(row_scaled)[0]
+
+    predicted_ages.append(pred)
+
+test_df["Predicted_Brain_Age"] = np.round(predicted_ages).astype(int)
+
+# =====================================================
+# 13. BRAIN AGE GAP
+# =====================================================
+
+if y_test is not None:
+
+    test_df["Brain_Age_Gap"] = (
+
+        test_df["Predicted_Brain_Age"]
+
+        - test_df[AGE_COL]
+    )
+
+    mae = mean_absolute_error(
+
+        test_df[AGE_COL],
+
+        test_df["Predicted_Brain_Age"]
+    )
+
+    r2 = r2_score(
+
+        test_df[AGE_COL],
+
+        test_df["Predicted_Brain_Age"]
+    )
+
+    print("\n====================================")
+    print("TEST PERFORMANCE")
+    print("====================================")
+
+    print(f"MAE = {mae:.2f}")
+
+    print(f"R² = {r2:.3f}")
+
+# =====================================================
+# 14. SAVE RESULTS
+# =====================================================
+
+save_cols = [
+
+    "subject_ID",
+
+    "Cluster",
+
+    "Predicted_Brain_Age"
+]
+
+if AGE_COL in test_df.columns:
+
+    save_cols.append(AGE_COL)
+
+    save_cols.append("Brain_Age_Gap")
+
+results_df = test_df[save_cols]
+
+results_df.to_csv(
+
+    OUTPUT_PATH,
+
+    index=False
+)
+
+print("\n====================================")
+print("Saved:")
+print(OUTPUT_PATH)
+
+print("\nDone.")
+

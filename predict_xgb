@@ -5,6 +5,7 @@ from sklearn.preprocessing import StandardScaler
 
 from xgboost import XGBRegressor
 
+import numpy as np
 # ============================================
 # 1. 读取 TRAIN
 # ============================================
@@ -79,8 +80,9 @@ X_test_scaled = scaler.transform(X_test)
 # 8. predict
 # ============================================
 
-predicted_age = model.predict(X_test_scaled)
-
+predicted_age = np.round(
+    model.predict(X_test_scaled)
+).astype(int)
 # ============================================
 # 9. 保存结果
 # ============================================

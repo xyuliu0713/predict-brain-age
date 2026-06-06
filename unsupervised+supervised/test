@@ -1,0 +1,533 @@
+import pandas as pd
+import numpy as np
+import joblib
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
+from sklearn.svm import SVR
+from sklearn.impute import SimpleImputer
+
+# =====================================================
+# TRAIN PHASE
+# =====================================================
+
+print("===================================")
+print("TRAINING MODELS")
+print("===================================")
+
+TRAIN_PATH = (
+    "/Users/molin/Downloads/ML2/Train/"
+    "brain_age_features3.xlsx"
+)
+
+train_df = pd.read_excel(TRAIN_PATH)
+
+# -----------------------------------------------------
+# clean column names
+# -----------------------------------------------------
+
+train_df.columns = [
+
+    str(c)
+    .strip()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("(", "")
+    .replace(")", "")
+    .replace("=", "_")
+    .replace("__", "_")
+
+    for c in train_df.columns
+]
+
+# =====================================================
+# metadata columns
+# =====================================================
+
+AGE_COL = "Age"
+
+GENDER_COL = "Gender_1_Female,_2_Male"
+
+SCANNER_COL = "MRI_scanner"
+
+# =====================================================
+# feature columns
+# =====================================================
+
+exclude_cols = [
+
+    "subject_ID",
+
+    AGE_COL,
+
+    GENDER_COL,
+
+    SCANNER_COL
+]
+
+feature_cols = [
+
+    c for c in train_df.columns
+
+    if c not in exclude_cols
+]
+
+X_train = train_df[feature_cols]
+
+y_train = train_df[AGE_COL]
+
+print("\nOriginal training shape:")
+
+print(X_train.shape)
+
+print("\nTotal NaN in training:")
+
+print(X_train.isna().sum().sum())
+
+# =====================================================
+# GLOBAL IMPUTER
+# preserve missingness pattern
+# =====================================================
+
+global_imputer = SimpleImputer(
+
+    strategy='mean',
+
+    add_indicator=True
+)
+
+X_train_imputed = global_imputer.fit_transform(
+    X_train
+)
+
+print("\nAfter imputation + missing indicators:")
+
+print(X_train_imputed.shape)
+
+# =====================================================
+# GLOBAL SCALER
+# =====================================================
+
+global_scaler = StandardScaler()
+
+X_train_scaled = global_scaler.fit_transform(
+    X_train_imputed
+)
+
+# =====================================================
+# PCA
+# =====================================================
+
+print("\nRunning PCA...")
+
+pca = PCA(
+
+    n_components=30,
+
+    random_state=42
+)
+
+X_train_pca = pca.fit_transform(
+    X_train_scaled
+)
+
+print("\nPCA output shape:")
+
+print(X_train_pca.shape)
+
+print("\nExplained variance:")
+
+print(
+    np.sum(
+        pca.explained_variance_ratio_
+    )
+)
+
+# =====================================================
+# KMEANS
+# =====================================================
+
+N_CLUSTERS = 4
+
+print("\nRunning KMeans...")
+
+kmeans = KMeans(
+
+    n_clusters=N_CLUSTERS,
+
+    random_state=42,
+
+    n_init=20
+)
+
+train_clusters = kmeans.fit_predict(
+    X_train_pca
+)
+
+train_df["Cluster"] = train_clusters
+
+print("\nCluster counts:")
+
+print(
+    train_df["Cluster"]
+    .value_counts()
+)
+
+# =====================================================
+# TRAIN CLUSTER-SPECIFIC SVR
+# =====================================================
+
+cluster_models = {}
+
+print("\n===================================")
+print("TRAINING CLUSTER MODELS")
+print("===================================")
+
+for c in range(N_CLUSTERS):
+
+    print("\n-----------------------------------")
+    print(f"Cluster {c}")
+    print("-----------------------------------")
+
+    sub = train_df[
+        train_df["Cluster"] == c
+    ]
+
+    print(f"N = {len(sub)}")
+
+    X_sub = sub[feature_cols]
+
+    y_sub = sub[AGE_COL]
+
+    print(
+        f"NaN count = "
+        f"{X_sub.isna().sum().sum()}"
+    )
+
+    # =================================================
+    # cluster-specific imputer
+    # =================================================
+
+    imputer_sub = SimpleImputer(
+
+        strategy='mean',
+
+        add_indicator=True
+    )
+
+    X_sub_imputed = imputer_sub.fit_transform(
+        X_sub
+    )
+
+    # =================================================
+    # cluster-specific scaler
+    # =================================================
+
+    scaler_sub = StandardScaler()
+
+    X_sub_scaled = scaler_sub.fit_transform(
+        X_sub_imputed
+    )
+
+    # =================================================
+    # SVR
+    # =================================================
+
+    model = SVR(
+
+        kernel='rbf',
+
+        C=10,
+
+        epsilon=0.1
+    )
+
+    model.fit(
+
+        X_sub_scaled,
+
+        y_sub
+    )
+
+    # =================================================
+    # save cluster model
+    # =================================================
+
+    cluster_models[c] = {
+
+        "imputer": imputer_sub,
+
+        "scaler": scaler_sub,
+
+        "model": model
+    }
+
+print("\nTraining finished.")
+
+# =====================================================
+# SAVE EVERYTHING
+# =====================================================
+
+SAVE_DIR = "/Users/molin/Downloads/ML2/models/"
+
+print("\nSaving models...")
+
+joblib.dump(
+
+    global_imputer,
+
+    SAVE_DIR + "global_imputer.pkl"
+)
+
+joblib.dump(
+
+    global_scaler,
+
+    SAVE_DIR + "global_scaler.pkl"
+)
+
+joblib.dump(
+
+    pca,
+
+    SAVE_DIR + "pca.pkl"
+)
+
+joblib.dump(
+
+    kmeans,
+
+    SAVE_DIR + "kmeans.pkl"
+)
+
+joblib.dump(
+
+    cluster_models,
+
+    SAVE_DIR + "cluster_models.pkl"
+)
+
+joblib.dump(
+
+    feature_cols,
+
+    SAVE_DIR + "feature_cols.pkl"
+)
+
+print("\nAll models saved.")
+
+# =====================================================
+# TEST PHASE
+# =====================================================
+
+print("\n===================================")
+print("TEST PREDICTION")
+print("===================================")
+
+TEST_PATH = (
+    "/Users/molin/Downloads/ML2/Test/"
+    "brain_age_test_features2.xlsx"
+)
+
+test_df = pd.read_excel(TEST_PATH)
+
+# =====================================================
+# clean test columns
+# =====================================================
+
+test_df.columns = [
+
+    str(c)
+    .strip()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("(", "")
+    .replace(")", "")
+    .replace("=", "_")
+    .replace("__", "_")
+
+    for c in test_df.columns
+]
+
+# =====================================================
+# LOAD MODELS
+# =====================================================
+
+print("\nLoading models...")
+
+global_imputer = joblib.load(
+    SAVE_DIR + "global_imputer.pkl"
+)
+
+global_scaler = joblib.load(
+    SAVE_DIR + "global_scaler.pkl"
+)
+
+pca = joblib.load(
+    SAVE_DIR + "pca.pkl"
+)
+
+kmeans = joblib.load(
+    SAVE_DIR + "kmeans.pkl"
+)
+
+cluster_models = joblib.load(
+    SAVE_DIR + "cluster_models.pkl"
+)
+
+feature_cols = joblib.load(
+    SAVE_DIR + "feature_cols.pkl"
+)
+
+# =====================================================
+# TEST FEATURES
+# =====================================================
+
+X_test = test_df[feature_cols]
+
+print("\nOriginal test shape:")
+
+print(X_test.shape)
+
+print("\nTotal NaN in test:")
+
+print(X_test.isna().sum().sum())
+
+# =====================================================
+# GLOBAL IMPUTATION
+# =====================================================
+
+X_test_imputed = global_imputer.transform(
+    X_test
+)
+
+print("\nAfter imputation:")
+
+print(X_test_imputed.shape)
+
+# =====================================================
+# GLOBAL SCALING
+# =====================================================
+
+X_test_scaled = global_scaler.transform(
+    X_test_imputed
+)
+
+# =====================================================
+# PCA TRANSFORM
+# =====================================================
+
+X_test_pca = pca.transform(
+    X_test_scaled
+)
+
+# =====================================================
+# PREDICT CLUSTERS
+# =====================================================
+
+test_clusters = kmeans.predict(
+    X_test_pca
+)
+
+test_df["Cluster"] = test_clusters
+
+print("\nTest cluster distribution:")
+
+print(
+    test_df["Cluster"]
+    .value_counts()
+)
+
+# =====================================================
+# BRAIN AGE PREDICTION
+# =====================================================
+
+print("\nPredicting brain age...")
+
+predictions = []
+
+for i in range(len(test_df)):
+
+    cluster = test_clusters[i]
+
+    model_info = cluster_models[cluster]
+
+    imputer_sub = model_info["imputer"]
+
+    scaler_sub = model_info["scaler"]
+
+    model = model_info["model"]
+
+    # -------------------------------------------------
+    # single subject
+    # -------------------------------------------------
+
+    x = X_test.iloc[[i]]
+
+    # -------------------------------------------------
+    # cluster-specific imputation
+    # -------------------------------------------------
+
+    x_imputed = imputer_sub.transform(
+        x
+    )
+
+    # -------------------------------------------------
+    # cluster-specific scaling
+    # -------------------------------------------------
+
+    x_scaled = scaler_sub.transform(
+        x_imputed
+    )
+
+    # -------------------------------------------------
+    # predict age
+    # -------------------------------------------------
+
+    pred_age = round(
+
+        model.predict(x_scaled)[0]
+    )
+
+    predictions.append(pred_age)
+
+# =====================================================
+# SAVE RESULTS
+# =====================================================
+
+test_df["Predicted_Age"] = predictions
+
+# optional:
+# calculate brain age gap
+# if true age exists
+
+if AGE_COL in test_df.columns:
+
+    test_df["Brain_Age_Gap"] = (
+
+        test_df["Predicted_Age"]
+
+        - test_df[AGE_COL]
+    )
+
+
+
+OUTPUT_PATH = (
+    "/Users/molin/Downloads/ML2/Test/"
+    "test_predictions.csv"
+)
+
+test_df.to_csv(
+
+    OUTPUT_PATH,
+
+    index=False
+)
+
+print("\n===================================")
+print("Prediction finished.")
+print("Saved:")
+print(OUTPUT_PATH)
+
+print("\nDone.")

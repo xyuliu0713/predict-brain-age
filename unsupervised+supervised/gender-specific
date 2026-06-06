@@ -1,0 +1,369 @@
+import pandas as pd
+import numpy as np
+
+from sklearn.model_selection import KFold
+
+from sklearn.preprocessing import (
+    StandardScaler
+)
+
+from sklearn.svm import SVR
+
+from sklearn.metrics import (
+    mean_absolute_error,
+    r2_score
+)
+
+# ============================================
+# 1. 读取数据
+# ============================================
+
+DATA_PATH = (
+    "/Users/molin/Downloads/ML2/Train/"
+    "brain_age_features2.xlsx"
+)
+
+df = pd.read_excel(DATA_PATH)
+
+print("Data shape:")
+print(df.shape)
+
+# ============================================
+# 2. clean column names
+# ============================================
+
+df.columns = [
+
+    str(c)
+    .strip()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("(", "")
+    .replace(")", "")
+    .replace("=", "_")
+    .replace("__", "_")
+
+    for c in df.columns
+]
+
+print("\nColumns:")
+print(df.columns.tolist())
+
+# ============================================
+# 3. metadata columns
+# ============================================
+
+AGE_COL = "Age"
+
+GENDER_COL = "Gender_1_Female,_2_Male"
+
+SCANNER_COL = "MRI_scanner"
+
+# female=1
+# male=2
+
+# ============================================
+# 4. one-hot encoding scanner
+# ============================================
+
+scanner_dummies = pd.get_dummies(
+
+    df[SCANNER_COL],
+
+    prefix="scanner",
+
+    drop_first=True
+)
+
+df = pd.concat(
+
+    [df, scanner_dummies],
+
+    axis=1
+)
+
+scanner_feature_cols = (
+    scanner_dummies.columns.tolist()
+)
+
+print("\nScanner features:")
+print(scanner_feature_cols)
+
+# ============================================
+# 5. split gender
+# ============================================
+
+female_df = df[
+    df[GENDER_COL] == 1
+]
+
+male_df = df[
+    df[GENDER_COL] == 2
+]
+
+print("\nFemale shape:")
+print(female_df.shape)
+
+print("\nMale shape:")
+print(male_df.shape)
+
+# ============================================
+# 6. brain age function
+# ============================================
+
+def run_brain_age_model(data, label):
+
+    print("\n===================================")
+    print(label)
+    print("===================================")
+
+    # ----------------------------------------
+    # feature columns
+    # ----------------------------------------
+
+    exclude_cols = [
+
+        "subject_ID",
+
+        AGE_COL,
+
+        GENDER_COL,
+
+        SCANNER_COL
+    ]
+
+    feature_cols = [
+
+        c for c in data.columns
+
+        if c not in exclude_cols
+    ]
+
+    X = data[feature_cols]
+
+    y = data[AGE_COL]
+
+    print("\nX shape:")
+    print(X.shape)
+
+    print("\ny shape:")
+    print(y.shape)
+
+    # ========================================
+    # 10-fold CV
+    # ========================================
+
+    kf = KFold(
+
+        n_splits=10,
+
+        shuffle=True,
+
+        random_state=42
+    )
+
+    mae_list = []
+
+    r2_list = []
+
+    all_true = []
+
+    all_pred = []
+
+    # ========================================
+    # CV loop
+    # ========================================
+
+    fold = 1
+
+    for train_idx, test_idx in kf.split(X):
+
+        print("\n-----------------------------------")
+        print(f"Fold {fold}")
+
+        X_train = X.iloc[train_idx]
+
+        X_test = X.iloc[test_idx]
+
+        y_train = y.iloc[train_idx]
+
+        y_test = y.iloc[test_idx]
+
+        # ------------------------------------
+        # scaler
+        # ------------------------------------
+
+        scaler = StandardScaler()
+
+        X_train_scaled = scaler.fit_transform(
+            X_train
+        )
+
+        X_test_scaled = scaler.transform(
+            X_test
+        )
+
+        # ------------------------------------
+        # SVR
+        # ------------------------------------
+
+        model = SVR(
+
+            kernel='rbf',
+
+            C=10,
+
+            epsilon=0.1
+        )
+
+        # ------------------------------------
+        # train
+        # ------------------------------------
+
+        model.fit(
+
+            X_train_scaled,
+
+            y_train
+        )
+
+        # ------------------------------------
+        # predict
+        # ------------------------------------
+
+        y_pred = model.predict(
+            X_test_scaled
+        )
+
+        # ------------------------------------
+        # metrics
+        # ------------------------------------
+
+        mae = mean_absolute_error(
+
+            y_test,
+
+            y_pred
+        )
+
+        r2 = r2_score(
+
+            y_test,
+
+            y_pred
+        )
+
+        print(f"MAE: {mae:.2f}")
+
+        print(f"R²: {r2:.3f}")
+
+        mae_list.append(mae)
+
+        r2_list.append(r2)
+
+        all_true.extend(y_test)
+
+        all_pred.extend(y_pred)
+
+        fold += 1
+
+    # ========================================
+    # Final results
+    # ========================================
+
+    print("\n===================================")
+    print(f"{label} FINAL RESULTS")
+    print("===================================")
+
+    print(
+        f"\nMean MAE: "
+        f"{np.mean(mae_list):.2f}"
+    )
+
+    print(
+        f"STD MAE: "
+        f"{np.std(mae_list):.2f}"
+    )
+
+    print(
+        f"\nMean R²: "
+        f"{np.mean(r2_list):.3f}"
+    )
+
+    print(
+        f"STD R²: "
+        f"{np.std(r2_list):.3f}"
+    )
+
+    # ========================================
+    # Brain Age Gap
+    # ========================================
+
+    brain_age_gap = (
+
+        np.array(all_pred)
+
+        -
+
+        np.array(all_true)
+    )
+
+    print("\nBrain Age Gap summary:")
+
+    print(
+        pd.Series(brain_age_gap).describe()
+    )
+
+    # ========================================
+    # save predictions
+    # ========================================
+
+    results_df = pd.DataFrame({
+
+        "True_Age": all_true,
+
+        "Predicted_Age": all_pred,
+
+        "Brain_Age_Gap": brain_age_gap
+    })
+
+    output_path = (
+
+        "/Users/molin/Downloads/ML2/Train/"
+
+        f"{label}_predictions.csv"
+    )
+
+    results_df.to_csv(
+
+        output_path,
+
+        index=False
+    )
+
+    print("\nSaved:")
+    print(output_path)
+
+# ============================================
+# 7. Female model
+# ============================================
+
+run_brain_age_model(
+
+    female_df,
+
+    "Female_SVR"
+)
+
+# ============================================
+# 8. Male model
+# ============================================
+
+run_brain_age_model(
+
+    male_df,
+
+    "Male_SVR"
+)
+
+print("\nDone.")

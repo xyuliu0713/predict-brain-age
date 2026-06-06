@@ -1,0 +1,154 @@
+import pandas as pd
+import numpy as np
+
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.mixture import GaussianMixture
+
+# =====================================================
+# Load data
+# =====================================================
+
+TRAIN_PATH = (
+    "/Users/molin/Downloads/ML2/Train/"
+    "brain_age_features3.xlsx"
+)
+
+df = pd.read_excel(TRAIN_PATH)
+
+print("Original shape:", df.shape)
+
+# =====================================================
+# Features for clustering
+# =====================================================
+
+exclude_cols = ["subject_ID", "Age", "Gender (1=Female, 2=Male)", "MRI scanner"]
+
+feature_cols = [
+    col for col in df.columns
+    if col not in exclude_cols
+]
+
+X = df[feature_cols]
+
+print("Number of brain features:", len(feature_cols))
+
+# =====================================================
+# Handle missing values
+# =====================================================
+
+X = X.fillna(X.median())
+
+# =====================================================
+# Standardization
+# =====================================================
+
+scaler = StandardScaler()
+
+X_scaled = scaler.fit_transform(X)
+
+# =====================================================
+# PCA
+# Keep 95% variance
+# =====================================================
+
+pca = PCA(
+    n_components=0.95,
+    random_state=42
+)
+
+X_pca = pca.fit_transform(X_scaled)
+
+print("PCA shape:", X_pca.shape)
+
+# =====================================================
+# Find optimal cluster number using BIC
+# =====================================================
+
+bic_scores = []
+
+candidate_k = range(2, 8)
+
+for k in candidate_k:
+
+    gmm = GaussianMixture(
+        n_components=k,
+        covariance_type="full",
+        random_state=42
+    )
+
+    gmm.fit(X_pca)
+
+    bic = gmm.bic(X_pca)
+
+    bic_scores.append(bic)
+
+    print(f"K={k}, BIC={bic:.2f}")
+
+best_k = candidate_k[np.argmin(bic_scores)]
+
+print("\nBest K =", best_k)
+
+# =====================================================
+# Final GMM
+# =====================================================
+
+gmm = GaussianMixture(
+    n_components=best_k,
+    covariance_type="full",
+    random_state=42
+)
+
+clusters = gmm.fit_predict(X_pca)
+
+df["Brain_Group"] = clusters
+
+# =====================================================
+# Reorder cluster labels by mean age
+# =====================================================
+
+group_mean_age = (
+    df.groupby("Brain_Group")["Age"]
+      .mean()
+      .sort_values()
+)
+
+mapping = {
+    old_label: new_label
+    for new_label, old_label
+    in enumerate(group_mean_age.index)
+}
+
+df["Brain_Group"] = df["Brain_Group"].map(mapping)
+
+# =====================================================
+# Age summary
+# =====================================================
+
+summary = (
+    df.groupby("Brain_Group")["Age"]
+      .agg([
+          "count",
+          "min",
+          "max",
+          "mean",
+          "std"
+      ])
+)
+
+print("\nAge Distribution by Brain Group")
+print(summary)
+
+# =====================================================
+# Save
+# =====================================================
+
+OUTPUT_PATH = (
+    "/Users/molin/Downloads/ML2/Train/"
+    "brain_age_features3_clustered.xlsx"
+)
+
+df.to_excel(OUTPUT_PATH, index=False)
+
+print("\nSaved to:")
+print(OUTPUT_PATH)

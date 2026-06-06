@@ -1,0 +1,116 @@
+import pandas as pd
+
+# =========================
+# File paths
+# =========================
+csv_file = "/Users/molin/Downloads/ML2/subject_info-389_updated_best.csv"
+xlsx_file = "/Users/molin/Downloads/ML2/Test/brain_age_test_features3.xlsx"
+
+# =========================
+# Read subject info
+# =========================
+subject_info = pd.read_csv(csv_file)
+
+# 第一列为subject_ID
+subject_id_col = subject_info.columns[0]
+
+# 第四列为年龄(ÄêÁä)
+age_col = subject_info.columns[3]
+
+print("Subject ID column:", subject_id_col)
+print("Age column:", age_col)
+
+# =========================
+# Create age groups
+# =========================
+young_ids = subject_info.loc[
+    (subject_info[age_col] >= 14) &
+    (subject_info[age_col] <= 35),
+    subject_id_col
+]
+
+middle_ids = subject_info.loc[
+    (subject_info[age_col] >= 36) &
+    (subject_info[age_col] <= 55),
+    subject_id_col
+]
+
+old_ids = subject_info.loc[
+    (subject_info[age_col] >= 56) &
+    (subject_info[age_col] <= 80),
+    subject_id_col
+]
+
+print(f"Young: {len(young_ids)}")
+print(f"Middle: {len(middle_ids)}")
+print(f"Old: {len(old_ids)}")
+
+# =========================
+# Read feature table
+# =========================
+features = pd.read_excel(xlsx_file)
+
+print("\nColumns in brain_age_test_features3.xlsx:")
+print(features.columns.tolist())
+
+# =========================
+# Find subject ID column
+# =========================
+possible_cols = [
+    "subject_ID",
+    "Subject_ID",
+    "subject_id",
+    "ID",
+    "id"
+]
+
+feature_id_col = None
+
+for col in possible_cols:
+    if col in features.columns:
+        feature_id_col = col
+        break
+
+if feature_id_col is None:
+    # 默认使用第一列
+    feature_id_col = features.columns[0]
+    print(f"\nNo standard ID column found. Using first column: {feature_id_col}")
+else:
+    print(f"\nUsing ID column: {feature_id_col}")
+
+# 保证类型一致
+features[feature_id_col] = features[feature_id_col].astype(str)
+young_ids = young_ids.astype(str)
+middle_ids = middle_ids.astype(str)
+old_ids = old_ids.astype(str)
+
+# =========================
+# Split into 3 tables
+# =========================
+young_table = features[
+    features[feature_id_col].isin(young_ids)
+]
+
+middle_table = features[
+    features[feature_id_col].isin(middle_ids)
+]
+
+old_table = features[
+    features[feature_id_col].isin(old_ids)
+]
+
+# =========================
+# Save files
+# =========================
+young_out = "/Users/molin/Downloads/ML2/Test/brain_age_test_features3_Young.xlsx"
+middle_out = "/Users/molin/Downloads/ML2/Test/brain_age_test_features3_Middle.xlsx"
+old_out = "/Users/molin/Downloads/ML2/Test/brain_age_test_features3_Old.xlsx"
+
+young_table.to_excel(young_out, index=False)
+middle_table.to_excel(middle_out, index=False)
+old_table.to_excel(old_out, index=False)
+
+print("\nSaved:")
+print(young_out, len(young_table))
+print(middle_out, len(middle_table))
+print(old_out, len(old_table))

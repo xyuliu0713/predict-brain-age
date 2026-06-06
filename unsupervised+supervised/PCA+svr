@@ -1,0 +1,638 @@
+# uploaded MAE = 6.9 
+# MAE = 3.67866323907455
+
+# PCA 0.95: MAE = 3.3136246786632393
+
+from matplotlib.pyplot import grid
+from fury import grid
+import pandas as pd
+import numpy as np
+
+from sklearn.model_selection import KFold
+
+from sklearn.preprocessing import StandardScaler
+
+from sklearn.decomposition import PCA
+
+from sklearn.svm import SVR
+
+from sklearn.metrics import (
+    mean_absolute_error,
+    r2_score
+)
+import os
+
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+
+import pandas as pd
+import numpy as np
+
+np.random.seed(42)
+# ============================================
+# 1. Load data
+# ============================================
+
+DATA_PATH = (
+    "/Users/molin/Downloads/ML2/Train/"
+    "brain_age_features3.xlsx"
+)
+
+df = pd.read_excel(DATA_PATH)
+
+print("===================================")
+print("Data Loaded")
+print("===================================")
+
+print("\nData shape:")
+print(df.shape)
+
+# ============================================
+# 2. Clean column names
+# ============================================
+
+df.columns = [
+
+    str(c)
+    .strip()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("(", "")
+    .replace(")", "")
+    .replace("=", "_")
+    .replace("__", "_")
+
+    for c in df.columns
+]
+
+print("\nColumns cleaned.")
+
+# ============================================
+# 3. Metadata columns
+# ============================================
+
+AGE_COL = "Age"
+
+GENDER_COL = "Gender_1_Female,_2_Male"
+
+SCANNER_COL = "MRI_scanner"
+
+# female = 1
+# male = 2
+
+# ============================================
+# 4. Check scanner types
+# ============================================
+
+print("\nScanner types:")
+print(df[SCANNER_COL].value_counts())
+
+# ============================================
+# 5. Brain age function
+# ============================================
+
+def run_brain_age_model(data, label):
+
+    print("\n===================================")
+    print(f"Running: {label}")
+    print("===================================")
+
+    # ----------------------------------------
+    # Exclude metadata columns
+    # ----------------------------------------
+
+    exclude_cols = [
+
+        "subject_ID",
+
+        AGE_COL,
+
+        GENDER_COL,
+
+        SCANNER_COL
+    ]
+
+    feature_cols = [
+
+        c for c in data.columns
+
+        if c not in exclude_cols
+    ]
+
+    # ----------------------------------------
+    # X and y
+    # ----------------------------------------
+
+    X = data[feature_cols]
+
+    y = data[AGE_COL]
+
+    print("\nX shape:")
+    print(X.shape)
+
+    print("\ny shape:")
+    print(y.shape)
+
+    # ========================================
+    # 10-fold cross-validation
+    # ========================================
+
+    kf = KFold(
+
+        n_splits=10,
+
+        shuffle=True,
+
+        random_state=42
+    )
+
+    mae_list = []
+
+    r2_list = []
+
+    all_true = []
+
+    all_pred = []
+
+    fold = 1
+
+    # ========================================
+    # CV loop
+    # ========================================
+
+    for train_idx, test_idx in kf.split(X):
+
+        print("\n-----------------------------------")
+        print(f"Fold {fold}")
+
+        # ------------------------------------
+        # Split
+        # ------------------------------------
+
+        X_train = X.iloc[train_idx]
+
+        X_test = X.iloc[test_idx]
+
+        y_train = y.iloc[train_idx]
+
+        y_test = y.iloc[test_idx]
+
+        # ------------------------------------
+        # StandardScaler
+        # ------------------------------------
+
+        scaler = StandardScaler()
+
+        X_train_scaled = scaler.fit_transform(
+            X_train
+        )
+
+        X_test_scaled = scaler.transform(
+            X_test
+        )
+
+        # ------------------------------------
+        # PCA (unsupervised)
+        # ------------------------------------
+
+        pca = PCA(
+
+            n_components=0.95,
+            svd_solver='full'
+        )
+
+        X_train_pca = pca.fit_transform(
+            X_train_scaled
+        )
+
+        X_test_pca = pca.transform(
+            X_test_scaled
+        )
+
+        print(
+            f"PCA components: "
+            f"{pca.n_components_}"
+        )
+
+        # ------------------------------------
+        # SVR (supervised)
+        # ------------------------------------
+
+        from sklearn.model_selection import GridSearchCV
+
+        param_grid = {
+
+            'C': [1, 10, 100],
+
+            'gamma': ['scale', 0.01, 0.001],
+
+            'epsilon': [0.1, 0.5, 1]
+        }
+
+        grid = GridSearchCV(
+
+            SVR(kernel='rbf'),
+
+            param_grid,
+
+            cv=5,
+
+            scoring='neg_mean_absolute_error',
+
+            n_jobs=-1
+        )
+
+        grid.fit(X_train_pca, y_train)
+
+        print("Best parameters:")
+
+        print(grid.best_params_)
+
+        model = grid.best_estimator_
+
+        # ------------------------------------
+        # Train
+        # ------------------------------------
+
+        model.fit(
+
+            X_train_pca,
+
+            y_train
+        )
+
+        # ------------------------------------
+        # Predict
+        # ------------------------------------
+
+        y_pred = model.predict(
+            X_test_pca
+        )
+
+        # ------------------------------------
+        # Metrics
+        # ------------------------------------
+
+        mae = mean_absolute_error(
+
+            y_test,
+
+            y_pred
+        )
+
+        r2 = r2_score(
+
+            y_test,
+
+            y_pred
+        )
+
+        print(f"MAE: {mae:.2f}")
+
+        print(f"R²: {r2:.3f}")
+
+        mae_list.append(mae)
+
+        r2_list.append(r2)
+
+        all_true.extend(y_test)
+
+        all_pred.extend(y_pred)
+
+        fold += 1
+
+    # ========================================
+    # Final results
+    # ========================================
+
+    print("\n===================================")
+    print(f"{label} FINAL RESULTS")
+    print("===================================")
+
+    print(
+        f"\nMean MAE: "
+        f"{np.mean(mae_list):.2f}"
+    )
+
+    print(
+        f"STD MAE: "
+        f"{np.std(mae_list):.2f}"
+    )
+
+    print(
+        f"\nMean R²: "
+        f"{np.mean(r2_list):.3f}"
+    )
+
+    print(
+        f"STD R²: "
+        f"{np.std(r2_list):.3f}"
+    )
+
+    # ========================================
+    # Brain Age Gap
+    # ========================================
+
+    brain_age_gap = (
+
+        np.array(all_pred)
+
+        -
+
+        np.array(all_true)
+    )
+
+    print("\nBrain Age Gap summary:")
+
+    print(
+        pd.Series(brain_age_gap).describe()
+    )
+
+    # ========================================
+    # Save predictions
+    # ========================================
+
+    results_df = pd.DataFrame({
+
+        "True_Age": all_true,
+
+        "Predicted_Age": all_pred,
+
+        "Brain_Age_Gap": brain_age_gap
+    })
+
+    output_path = (
+
+        "/Users/molin/Downloads/ML2/Train/"
+
+        f"{label}_predictions.csv"
+    )
+
+    results_df.to_csv(
+
+        output_path,
+
+        index=False
+    )
+
+    print("\nSaved:")
+    print(output_path)
+
+# ============================================
+# 6. scanner × gender subgroup analysis
+# ============================================
+
+groups = df.groupby(
+    [GENDER_COL, SCANNER_COL]
+)
+
+for (gender, scanner), group_df in groups:
+
+    # ----------------------------------------
+    # Gender label
+    # ----------------------------------------
+
+    gender_name = (
+
+        "Female"
+
+        if gender == 1
+
+        else "Male"
+    )
+
+    # ----------------------------------------
+    # Group label
+    # ----------------------------------------
+
+    label = (
+
+        f"{gender_name}_{scanner}"
+    )
+
+    print("\n===================================")
+    print(f"Group: {label}")
+    print("===================================")
+
+    print("\nGroup shape:")
+    print(group_df.shape)
+
+    # ----------------------------------------
+    # Run model
+    # ----------------------------------------
+
+    run_brain_age_model(
+
+        group_df,
+
+        label
+    )
+
+# ============================================
+# Done
+# ============================================
+
+print("\n===================================")
+print("ALL ANALYSES FINISHED")
+print("===================================")
+
+
+# ============================================
+# 7. TRAIN FINAL MODEL ON FULL TRAIN DATA
+# ============================================
+
+print("\n===================================")
+print("TRAINING FINAL MODEL")
+print("===================================")
+
+# --------------------------------------------
+# feature columns
+# --------------------------------------------
+
+exclude_cols = [
+
+    "subject_ID",
+
+    AGE_COL,
+
+    GENDER_COL,
+
+    SCANNER_COL
+]
+
+feature_cols = [
+
+    c for c in df.columns
+
+    if c not in exclude_cols
+]
+
+# --------------------------------------------
+# Train X and y
+# --------------------------------------------
+
+X_train_full = df[feature_cols]
+
+y_train_full = df[AGE_COL]
+
+print("\nFull train X shape:")
+print(X_train_full.shape)
+
+# ============================================
+# StandardScaler
+# ============================================
+
+scaler = StandardScaler()
+
+X_train_scaled = scaler.fit_transform(
+    X_train_full
+)
+
+# ============================================
+# PCA
+# ============================================
+
+pca = PCA(
+    n_components=0.95
+)
+
+X_train_pca = pca.fit_transform(
+    X_train_scaled
+)
+
+print(
+    f"\nFinal PCA components: "
+    f"{pca.n_components_}"
+)
+
+# ============================================
+# SVR
+# ============================================
+
+final_model = SVR(
+
+    kernel='rbf',
+
+    C=100,
+    gamma=0.0004,
+    epsilon=2
+)
+
+# ============================================
+# Train final model
+# ============================================
+
+final_model.fit(
+
+    X_train_pca,
+
+    y_train_full
+)
+
+print("\nFinal model trained.")
+
+# ============================================
+# 8. LOAD TEST DATA
+# ============================================
+
+TEST_PATH = (
+    "/Users/molin/Downloads/ML2/Test/"
+    "brain_age_test_features3.xlsx"
+)
+
+test_df = pd.read_excel(TEST_PATH)
+
+print("\n===================================")
+print("TEST DATA LOADED")
+print("===================================")
+
+print("\nTest shape:")
+print(test_df.shape)
+
+# ============================================
+# Clean column names
+# ============================================
+
+test_df.columns = [
+
+    str(c)
+    .strip()
+    .replace(" ", "_")
+    .replace("-", "_")
+    .replace("(", "")
+    .replace(")", "")
+    .replace("=", "_")
+    .replace("__", "_")
+
+    for c in test_df.columns
+]
+
+# ============================================
+# Test features
+# ============================================
+
+X_test_final = test_df[feature_cols]
+
+print("\nTest X shape:")
+print(X_test_final.shape)
+
+# ============================================
+# Apply scaler + PCA
+# ============================================
+
+X_test_scaled = scaler.transform(
+    X_test_final
+)
+
+X_test_pca = pca.transform(
+    X_test_scaled
+)
+
+# ============================================
+# Predict brain age
+# ============================================
+
+test_predictions = final_model.predict(
+    X_test_pca
+)
+
+# ============================================
+# Save predictions
+# ============================================
+
+prediction_df = pd.DataFrame({
+
+    "Predicted_Age": np.round(
+        test_predictions
+    ).astype(int)
+})
+
+# 如果 test 有 subject_ID
+if "subject_ID" in test_df.columns:
+
+    prediction_df.insert(
+
+        0,
+
+        "subject_ID",
+
+        test_df["subject_ID"]
+    )
+
+OUTPUT_PATH = (
+    "/Users/molin/Downloads/ML2/Test/"
+    "brain_age_test_predictions4.csv"
+)
+
+prediction_df.to_csv(
+
+    OUTPUT_PATH,
+
+    index=False
+)
+
+print("\n===================================")
+print("TEST PREDICTIONS SAVED")
+print("===================================")
+
+print(OUTPUT_PATH)
